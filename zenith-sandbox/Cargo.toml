@@ -1,0 +1,12 @@
+[package]
+name = "zenith-sandbox"
+version = "0.1.0"
+edition = "2021"
+description = "Sandbox application for Zenith engine"
+license = "MIT"
+
+[dependencies]
+pollster.workspace = true
+log.workspace = true
+
+zenith = { path = "../zenith" }

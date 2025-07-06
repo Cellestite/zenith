@@ -1,0 +1,11 @@
+[package]
+name = "zenith-render"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+wgpu.workspace = true
+winit.workspace = true
+anyhow.workspace = true
+
+zenith-core = { path = "../zenith-core" }

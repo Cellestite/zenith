@@ -1,0 +1,14 @@
+[package]
+name = "zenith"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+winit.workspace = true
+pollster.workspace = true
+anyhow.workspace = true
+
+zenith-core = { path = "../zenith-core" }
+zenith-render = { path = "../zenith-render" }
+zenith-renderer = { path = "../zenith-renderer" }
+zenith-rendergraph = { path = "../zenith-rendergraph" }

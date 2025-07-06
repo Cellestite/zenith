@@ -1,0 +1,15 @@
+[package]
+name = "zenith-core"
+version = "0.1.0"
+edition = "2024"
+description = "Core rendering engine for Zenith"
+license = "MIT"
+
+[dependencies]
+anyhow.workspace = true
+env_logger.workspace = true
+log.workspace = true
+smallvec.workspace = true
+hashbrown.workspace = true
+foldhash.workspace = true
+rand.workspace = true
