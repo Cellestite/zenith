@@ -2,18 +2,22 @@ use std::cell::Cell;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use log::warn;
-use crate::node::{NodePipelineState, RenderGraphNode};
-use crate::graph::{NodeExecutionContext, RenderGraph, ResourceStorage};
-use crate::node::{ColorInfo, DepthStencilInfo};
-use crate::interface::{GraphResourceAccess, ResourceDescriptor, Texture};
-use crate::resource::{ExportResourceStorage, ExportedRenderGraphResource, GraphImportExportResource, GraphResource, GraphResourceDescriptor, GraphResourceId, GraphResourceMutability, InitialResourceStorage, ReadOnly, ReadWrite, RenderGraphResource, RenderGraphResourceAccess};
+use crate::node::{ColorInfoBuilder, NodePipelineState, RenderGraphNode};
+use crate::graph::{GraphicNodeExecutionContext, LambdaNodeExecutionContext, RenderGraph, ResourceStorage};
+use crate::node::{DepthStencilInfo};
+use crate::interface::{GraphResourceAccess, ResourceDescriptor, SharedRenderGraphResource, Texture};
+use crate::resource::{
+    ExportResourceStorage, ExportedRenderGraphResource, GraphImportExportResource,
+    GraphResource, GraphResourceDescriptor, GraphResourceView,
+    GraphResourceId, InitialResourceStorage,
+    RenderGraphResource, RenderGraphResourceAccess, Rt, Srv, Uav};
 use zenith_render::GraphicShader;
+use crate::GraphicPipelineDescriptor;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ResourceAccessStorage<V: GraphResourceMutability> {
+pub(crate) struct ResourceAccessStorage {
     pub(crate) id: GraphResourceId,
     pub(crate) access: GraphResourceAccess,
-    pub(crate) _marker: PhantomData<V>,
 }
 
 #[derive(Default)]
@@ -59,7 +63,7 @@ impl RenderGraphBuilder {
     pub fn import<R: GraphImportExportResource>(
         &mut self,
         name: &str,
-        import_resource: Arc<R>,
+        import_resource: impl Into<SharedRenderGraphResource<R>>,
         access: impl Into<GraphResourceAccess>,
     ) -> RenderGraphResource<R> {
         GraphImportExportResource::import(import_resource, name, self, access)
@@ -82,13 +86,38 @@ impl RenderGraphBuilder {
             name: name.to_string(),
             inputs: vec![],
             outputs: vec![],
-            record_command_func: None,
-            pipeline_state: NodePipelineState::Graphic(Default::default()),
+            pipeline_state: NodePipelineState::Graphic {
+                pipeline_desc: Default::default(),
+                job_functor: None,
+            },
         });
 
         GraphicNodeBuilder {
-            node: &mut self.nodes[index],
-            resources: &self.initial_resources,
+            common: CommonNodeBuilder {
+                node: &mut self.nodes[index],
+                resources: &self.initial_resources,
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn add_lambda_node(&mut self, name: &str) -> LambdaNodeBuilder {
+        let index = self.nodes.len();
+
+        self.nodes.push(RenderGraphNode {
+            name: name.to_string(),
+            inputs: vec![],
+            outputs: vec![],
+            pipeline_state: NodePipelineState::Lambda {
+                job_functor: None,
+            },
+        });
+
+        LambdaNodeBuilder {
+            common: CommonNodeBuilder {
+                node: &mut self.nodes[index],
+                resources: &self.initial_resources,
+            }
         }
     }
 
@@ -128,12 +157,12 @@ impl RenderGraphBuilder {
                     }
                     InitialResourceStorage::ImportedBuffer(name, buffer, init_access) => ResourceStorage::ImportedBuffer {
                         name,
-                        resource: buffer,
+                        resource: buffer.into(),
                         state_tracker: Cell::new(init_access).into(),
                     },
                     InitialResourceStorage::ImportedTexture(name, tex, init_access) => ResourceStorage::ImportedTexture {
                         name,
-                        resource: tex,
+                        resource: tex.into(),
                         state_tracker: Cell::new(init_access).into(),
                     },
                 }
@@ -147,19 +176,18 @@ impl RenderGraphBuilder {
     }
 }
 
-
-pub struct GraphicNodeBuilder<'node, 'res> {
+pub struct CommonNodeBuilder<'node, 'res> {
     node: &'node mut RenderGraphNode,
     resources: &'res Vec<InitialResourceStorage>,
 }
 
-impl<'node, 'res> GraphicNodeBuilder<'node, 'res> {
+impl CommonNodeBuilder<'_, '_> {
     #[must_use]
-    pub fn read<R: GraphResource>(
+    fn read<R: GraphResource, V: GraphResourceView>(
         &mut self,
-        resource: RenderGraphResource<R>,
-        access: impl Into<GraphResourceAccess>
-    ) -> RenderGraphResourceAccess<R, ReadOnly> {
+        resource: &RenderGraphResource<R>,
+        access: impl Into<GraphResourceAccess>,
+    ) -> RenderGraphResourceAccess<R, V> {
         let access = RenderGraphResourceAccess {
             id: resource.id,
             access: access.into(),
@@ -181,11 +209,11 @@ impl<'node, 'res> GraphicNodeBuilder<'node, 'res> {
     }
 
     #[must_use]
-    pub fn write<R: GraphResource>(
+    fn write<R: GraphResource, V: GraphResourceView>(
         &mut self,
-        resource: RenderGraphResource<R>,
+        resource: &mut RenderGraphResource<R>,
         access: impl Into<GraphResourceAccess>,
-    ) -> RenderGraphResourceAccess<R, ReadWrite>  {
+    ) -> RenderGraphResourceAccess<R, V>  {
         let access = RenderGraphResourceAccess {
             id: resource.id,
             access: access.into(),
@@ -205,61 +233,118 @@ impl<'node, 'res> GraphicNodeBuilder<'node, 'res> {
 
         access
     }
+}
+
+macro_rules! inject_common_node_builder_methods {
+    ($read_view:ty, $write_view:ty) => {
+        #[must_use]
+        #[inline]
+        pub fn read<R: GraphResource>(
+            &mut self,
+            resource: &RenderGraphResource<R>,
+            access: impl Into<GraphResourceAccess>
+        ) -> RenderGraphResourceAccess<R, $read_view> {
+            self.common.read(resource, access)
+        }
+
+        #[must_use]
+        #[inline]
+        pub fn write<R: GraphResource>(
+            &mut self,
+            resource: &mut RenderGraphResource<R>,
+            access: impl Into<GraphResourceAccess>,
+        ) -> RenderGraphResourceAccess<R, $write_view>  {
+            self.common.write(resource, access)
+        }
+    };
+}
+
+pub struct GraphicNodeBuilder<'node, 'res> {
+    common: CommonNodeBuilder<'node, 'res>,
+}
+
+impl<'node, 'res> Drop for GraphicNodeBuilder<'node, 'res> {
+    fn drop(&mut self) {
+        debug_assert!(self.common.node.pipeline_state.valid());
+    }
+}
+
+impl<'node, 'res> GraphicNodeBuilder<'node, 'res> {
+    inject_common_node_builder_methods!(Srv, Rt);
 
     #[inline]
-    #[must_use]
-    pub fn setup_pipeline(&mut self) -> GraphicPipelineBuilder {
-        GraphicPipelineBuilder {
-            node: self.node
+    pub fn execute<F>(&mut self, node_job: F)
+    where
+        F: FnOnce(&mut GraphicNodeExecutionContext, &mut wgpu::CommandEncoder) + 'static
+    {
+        if let NodePipelineState::Graphic { job_functor, .. } = &mut self.common.node.pipeline_state {
+            job_functor.replace(Box::new(node_job));
+        } else {
+            unreachable!("Use other node execution context in graphic node: {}", self.common.node.name());
         }
     }
 
-    pub fn record_command<F>(&mut self, record_command_func: F)
+    #[must_use]
+    #[inline]
+    pub fn setup_pipeline(&mut self) -> GraphicPipelineBuilder {
+        let pipeline_desc = if let NodePipelineState::Graphic { pipeline_desc, .. } = &mut self.common.node.pipeline_state {
+            pipeline_desc
+        } else {
+            unreachable!();
+        };
+
+        GraphicPipelineBuilder {
+            pipeline_desc,
+        }
+    }
+}
+
+pub struct LambdaNodeBuilder<'node, 'res> {
+    common: CommonNodeBuilder<'node, 'res>,
+}
+
+impl<'node, 'res> LambdaNodeBuilder<'node, 'res> {
+    inject_common_node_builder_methods!(Srv, Uav);
+
+    #[inline]
+    pub fn execute<F>(&mut self, node_job: F)
     where
-        F: FnOnce(&mut NodeExecutionContext) + 'static
+        F: FnOnce(&mut LambdaNodeExecutionContext, &mut wgpu::CommandEncoder) + 'static
     {
-        self.node.record_command_func.replace(Box::new(record_command_func));
+        if let NodePipelineState::Lambda { job_functor } = &mut self.common.node.pipeline_state {
+            job_functor.replace(Box::new(node_job));
+        } else {
+            unreachable!("Use other node execution context in lambda node: {}", self.common.node.name());
+        }
     }
 }
 
 pub struct GraphicPipelineBuilder<'a> {
-    node: &'a mut RenderGraphNode,
+    pipeline_desc: &'a mut GraphicPipelineDescriptor,
 }
 
 impl<'a> GraphicPipelineBuilder<'a> {
+    #[inline]
     pub fn with_shader(self, shader: Arc<GraphicShader>) -> Self {
-        if let NodePipelineState::Graphic(pipeline) = &mut self.node.pipeline_state {
-            pipeline.shader = Some(shader);
-            self
-        } else {
-            panic!("Try to attach raster shader to a non-graphic pipeline!")
-        }
+        self.pipeline_desc.shader = Some(shader);
+        self
     }
 
-    pub fn with_color(self, color: RenderGraphResourceAccess<Texture, ReadWrite>, color_info: ColorInfo) -> Self {
-        if let NodePipelineState::Graphic(pipeline) = &mut self.node.pipeline_state {
-            pipeline.color_attachments.push((color, color_info));
-            self
-        } else {
-            panic!("Try to add color attachment to a non-graphic pipeline!")
-        }
+    #[inline]
+    pub fn with_color(self, color: RenderGraphResourceAccess<Texture, Rt>, color_info: ColorInfoBuilder) -> Self {
+        self.pipeline_desc.color_attachments.push((color, color_info.build().unwrap()));
+        self
     }
 
-    pub fn with_depth_stencil(self, depth_stencil: RenderGraphResourceAccess<Texture, ReadWrite>, depth_stencil_info: DepthStencilInfo) -> Self {
-        if let NodePipelineState::Graphic(pipeline) = &mut self.node.pipeline_state {
-            pipeline.depth_stencil_attachment = Some((depth_stencil, depth_stencil_info));
-            self
-        } else {
-            panic!("Try to add depth stencil attachment to a non-graphic pipeline!")
-        }
+    #[inline]
+    pub fn with_depth_stencil(self, depth_stencil: RenderGraphResourceAccess<Texture, Rt>, depth_stencil_info: DepthStencilInfo) -> Self {
+        self.pipeline_desc.depth_stencil_attachment = Some((depth_stencil, depth_stencil_info));
+        self
     }
 
-    pub fn with_binding<R: GraphResource, V: GraphResourceMutability>(self, binding: u32, color: RenderGraphResourceAccess<R, V>) -> Self {
-        if let NodePipelineState::Graphic(pipeline) = &mut self.node.pipeline_state {
-            pipeline.bindings.push((binding, color.id));
-            self
-        } else {
-            panic!("Try to add color attachment to a non-graphic pipeline!")
-        }
-    }
+    // #[inline]
+    // pub fn with_binding<R: GraphResource, V: GraphResourceView>(self, binding: u32, color: &RenderGraphResourceAccess<R, V>) -> Self {
+    //     self.pipeline_desc.bindings.push((binding, color.id));
+    //     self
+    // }
 }

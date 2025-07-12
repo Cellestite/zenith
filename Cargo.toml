@@ -2,26 +2,36 @@
 resolver = "3"
 
 members = [
+    "zenith-build",
+
     "zenith-sandbox",
 
     "zenith",
     "zenith-core",
     "zenith-render",
     "zenith-rendergraph",
-    "zenith-renderer",
+    "zenith-renderer", "zenith-task",
 ]
 
 [workspace.dependencies]
-winit = "0.30"
-wgpu = "25.0.0"
+winit = "0.30.11"
+wgpu = { version =  "25.0.0", features = ["naga-ir"] }
 pollster = "0.4"
 env_logger = "0.11"
 log = "0.4"
 bytemuck = { version = "1.23", features = ["derive"] }
 glam = "0.30"
 anyhow = "1.0.98"
-derive_more = { version = "2.0.1", features = ["from", "try_into"] }
+derive_more = { version = "2.0.1", features = ["try_from", "from", "try_into", "into", "deref", "deref_mut"] }
 smallvec = "1.15"
 hashbrown = "0.15.4"
 foldhash = "0.1.5"
 rand = "0.9.1"
+gltf = "1.4"
+base64 = "0.22"
+static_assertions = "1.1.0"
+wgsl_bindgen = "0.20.0"
+miette = "7.6.0"
+naga_oil = "0.18.0"
+include_absolute_path = "0.1.7"
+derive_builder = "0.20.2"

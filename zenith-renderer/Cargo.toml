@@ -1,12 +1,14 @@
 [package]
 name = "zenith-renderer"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-wgpu = { workspace = true }
-bytemuck = { workspace = true }
+wgpu.workspace = true
+bytemuck.workspace  = true
 glam.workspace = true
 
-zenith-render = {path = "../zenith-render"}
-zenith-rendergraph = {path = "../zenith-rendergraph"}
+zenith-core = { path = "../zenith-core" }
+zenith-build = { path = "../zenith-build" }
+zenith-render = { path = "../zenith-render" }
+zenith-rendergraph = { path = "../zenith-rendergraph" }

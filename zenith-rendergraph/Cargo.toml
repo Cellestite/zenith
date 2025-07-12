@@ -9,6 +9,7 @@ bytemuck.workspace = true
 anyhow.workspace = true
 derive_more.workspace = true
 log.workspace = true
+derive_builder.workspace = true
 
 zenith-core = { path = "../zenith-core" }
 zenith-render = { path = "../zenith-render" }

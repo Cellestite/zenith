@@ -1,7 +1,5 @@
-﻿use derive_more::TryInto;
-use derive_more::From;
+﻿use derive_more::{From, TryInto, Deref, DerefMut};
 use std::marker::PhantomData;
-use std::sync::Arc;
 use crate::builder::{RenderGraphBuilder};
 use crate::resource::{ExportedRenderGraphResource, GraphImportExportResource, GraphResource, GraphResourceDescriptor, RenderGraphResource, GraphResourceState};
 
@@ -26,10 +24,10 @@ macro_rules! render_graph_resource_interface {
             }
 
             impl GraphImportExportResource for $res_ty {
-                fn import(self: Arc<Self>, name: &str, builder: &mut RenderGraphBuilder, access: impl Into<GraphResourceAccess>) -> RenderGraphResource<Self> {
+                fn import(shared_resource: impl Into<SharedRenderGraphResource<Self>>, name: &str, builder: &mut RenderGraphBuilder, access: impl Into<GraphResourceAccess>) -> RenderGraphResource<Self> {
                     let id = builder.initial_resources.len() as u32;
                     let uses = access.into().try_into().expect("Inconsistent import resource access!");
-                    builder.initial_resources.push((name.to_owned(), self, uses).into());
+                    builder.initial_resources.push((name.to_owned(), shared_resource.into(), uses).into());
 
                     RenderGraphResource {
                         id,
@@ -63,3 +61,12 @@ render_graph_resource_interface!(
     Buffer => wgpu::Buffer, BufferDesc => wgpu::BufferDescriptor<'static>, BufferState => wgpu::BufferUses,
     Texture => wgpu::Texture, TextureDesc => wgpu::TextureDescriptor<'static>, TextureState => wgpu::TextureUses
 );
+
+#[derive(Deref, DerefMut, From, Clone, Debug)]
+pub struct SharedRenderGraphResource<T: GraphResource>(T);
+
+impl<T: GraphResource> SharedRenderGraphResource<T> {
+    pub fn new(resource: T) -> Self {
+        Self(resource)
+    }
+}

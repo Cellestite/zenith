@@ -1,12 +1,15 @@
 [package]
 name = "zenith"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-winit.workspace = true
-pollster.workspace = true
-anyhow.workspace = true
+winit = { workspace = true }
+pollster = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+glam = { workspace = true }
+wgpu = { workspace = true }
 
 zenith-core = { path = "../zenith-core" }
 zenith-render = { path = "../zenith-render" }
