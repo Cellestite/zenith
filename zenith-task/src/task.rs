@@ -103,21 +103,21 @@ impl TaskState {
     }
 
     pub(crate) fn completed(&self) -> bool {
-        self.completed.load(Ordering::Acquire)
+        self.completed.load(Ordering::SeqCst)
     }
 
     pub(crate) fn set_completed(&self) {
-        self.completed.store(true, Ordering::Release);
+        self.completed.store(true, Ordering::SeqCst);
         self.condvar.notify_all();
     }
 
     pub(crate) fn wait(&self) {
-        if self.completed.load(Ordering::Acquire) {
+        if self.completed.load(Ordering::SeqCst) {
             return;
         }
 
         let mut result = self.result.lock();
-        while !self.completed.load(Ordering::Acquire) {
+        while !self.completed.load(Ordering::SeqCst) {
             self.condvar.wait(&mut result);
         }
     }
@@ -144,7 +144,7 @@ impl<T: Clone + Send + 'static> TaskResult<T> {
     where
         T: Send + 'static,
     {
-        if self.state.completed.load(Ordering::Acquire) {
+        if self.state.completed.load(Ordering::SeqCst) {
             self.state.result.lock().as_ref()?.downcast_ref().cloned()
         } else {
             None
@@ -157,7 +157,7 @@ impl<T: Clone + Send + 'static> TaskResult<T> {
     {
         self.wait();
 
-        if self.state.completed.load(Ordering::Acquire) {
+        if self.state.completed.load(Ordering::SeqCst) {
             self.state.result.lock()
                 .as_ref()
                 .expect("Task is not completed or result had been taken!")
@@ -192,7 +192,7 @@ impl<T: Send + 'static> TaskResult<T> {
     }
 
     pub fn completed(&self) -> bool {
-        self.state.completed.load(Ordering::Acquire)
+        self.state.completed.load(Ordering::SeqCst)
     }
 
     pub fn wait(&self) {
@@ -203,7 +203,7 @@ impl<T: Send + 'static> TaskResult<T> {
     where
         T: Send + 'static,
     {
-        if self.state.completed.load(Ordering::Acquire) {
+        if self.state.completed.load(Ordering::SeqCst) {
             let mut result = self.state.result.lock();
 
             if result.is_none() {
@@ -222,7 +222,7 @@ impl<T: Send + 'static> TaskResult<T> {
     {
         self.wait();
 
-        if self.state.completed.load(Ordering::Acquire) {
+        if self.state.completed.load(Ordering::SeqCst) {
             *self.state.result.lock().take()
                 .expect("Task is not completed or result had been taken!")
                 .downcast()
@@ -268,7 +268,7 @@ impl TaskHandle {
     }
 
     pub fn completed(&self) -> bool {
-        self.state.completed.load(Ordering::Acquire)
+        self.state.completed.load(Ordering::SeqCst)
     }
 
     pub fn wait(&self) {
