@@ -1,0 +1,17 @@
+[package]
+name = "zenith-task"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossbeam-queue.workspace = true
+anyhow.workspace = true
+futures.workspace = true
+pin-project.workspace = true
+pollster.workspace = true
+parking_lot.workspace = true
+
+zenith-core = { path = "../zenith-core" }
+
+[dev-dependencies]
+async-std = "1.13.1"
