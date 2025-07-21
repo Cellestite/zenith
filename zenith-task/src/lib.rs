@@ -58,6 +58,7 @@ where
 }
 
 pub fn block_on<F: IntoFuture>(future: F) {
+    // TODO: true async executor, this will block the thread in thread pool
     pollster::block_on(future);
 }
 
@@ -182,7 +183,7 @@ mod tests {
 
         let result = handles
             .into_iter()
-            .map(|handle| handle.get())
+            .map(|handle| handle.into_result())
             .fold(0, |acc, val| acc + val);
 
         let duration = start_time.elapsed();
@@ -274,7 +275,7 @@ mod tests {
             result
         });
 
-        let result = handle.get();
+        let result = handle.into_result();
         println!("Task finished: {}", result);
 
         assert_eq!(result, 84);
@@ -296,7 +297,7 @@ mod tests {
 
         let mut results = Vec::new();
         for handle in handles {
-            let result = handle.get();
+            let result = handle.into_result();
             results.push(result);
         }
 
@@ -360,7 +361,7 @@ mod tests {
 
         let mut results = Vec::new();
         for handle in handles {
-            results.push(handle.get());
+            results.push(handle.into_result());
         }
 
         println!("Result: {:?}", results);
@@ -378,7 +379,7 @@ mod tests {
         let first = submit(move || {
             inner_results.lock().push("first");
             println!("executing thread: {:?}", std::thread::current().name())
-        }).forget_result();
+        }).into_handle();
         let inner_results = results.clone();
         let second = submit(move || {
             inner_results.lock().push("second");
@@ -423,7 +424,7 @@ mod tests {
             ("worker", 2)
         ]);
 
-        let mut start = TaskResult::<()>::null();
+        let mut start = TaskResult::<()>::placeholder();
 
         for time in 0..5 {
             let main = submit_to_after("main", move || {

@@ -128,7 +128,7 @@ impl TaskExecutor {
         let task_id = boxed_task.id();
 
         let task_state = self.register_task(boxed_task, None);
-        let handle: TaskResult<T::Output> = TaskResult::from(task_state, task_id);
+        let handle: TaskResult<T::Output> = TaskResult::from_task(task_state, task_id);
 
         self.global_queue.push(QueuedTask::from(task_id, &[]));
         
@@ -152,7 +152,7 @@ impl TaskExecutor {
         let task_id = boxed_task.id();
 
         let task_state = self.register_task(boxed_task, Some(thread_name));
-        let handle: TaskResult<T::Output> = TaskResult::from(task_state, task_id);
+        let handle: TaskResult<T::Output> = TaskResult::from_task(task_state, task_id);
 
         // directly add to thread's local queue
         {
@@ -180,11 +180,11 @@ impl TaskExecutor {
         let task_id = boxed_task.id();
 
         let task_state = self.register_task(boxed_task, None);
-        let handle: TaskResult<T::Output> = TaskResult::from(task_state, task_id);
+        let handle: TaskResult<T::Output> = TaskResult::from_task(task_state, task_id);
 
         let dependencies = dependencies
             .iter()
-            .map(|dependency| dependency.as_state())
+            .map(|dependency| dependency.as_state().clone())
             .collect::<SmallVec<[Arc<TaskState>; 4]>>();
         self.global_queue.push(QueuedTask::from(task_id, &dependencies));
 
@@ -211,7 +211,7 @@ impl TaskExecutor {
         let task_id = boxed_task.id();
 
         let task_state = self.register_task(boxed_task, Some(thread_name));
-        let handle: TaskResult<T::Output> = TaskResult::from(task_state, task_id);
+        let handle: TaskResult<T::Output> = TaskResult::from_task(task_state, task_id);
 
         // directly add to thread's local queue
         {
@@ -219,7 +219,7 @@ impl TaskExecutor {
             if let Some(local_state) = thread_local_states.get(thread_name) {
                 let dependencies = dependencies
                     .iter()
-                    .map(|dependency| dependency.as_state())
+                    .map(|dependency| dependency.as_state().clone())
                     .collect::<SmallVec<[Arc<TaskState>; 4]>>();
 
                 local_state.local_queue.push(QueuedTask::from(task_id, &dependencies));
@@ -264,6 +264,7 @@ impl TaskExecutor {
         F::Output: Send + 'static
     {
         let async_task = move || {
+            // TODO: true async executor, this will block the thread in thread pool
             pollster::block_on(future)
         };
 
@@ -287,6 +288,7 @@ impl TaskExecutor {
         F::Output: Send + 'static
     {
         let async_task = move || {
+            // TODO: true async executor, this will block the thread in thread pool
             pollster::block_on(future)
         };
         
@@ -310,6 +312,7 @@ impl TaskExecutor {
         F::Output: Send + 'static
     {
         let async_task = move || {
+            // TODO: true async executor, this will block the thread in thread pool
             pollster::block_on(future)
         };
 
@@ -334,6 +337,7 @@ impl TaskExecutor {
         F::Output: Send + 'static
     {
         let async_task = move || {
+            // TODO: true async executor, this will block the thread in thread pool
             pollster::block_on(future)
         };
 

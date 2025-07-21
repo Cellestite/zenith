@@ -79,7 +79,7 @@ impl BoxedTask {
 }
 
 pub trait AsTaskState {
-    fn as_state(&self) -> Arc<TaskState>;
+    fn as_state(&self) -> &Arc<TaskState>;
 }
 
 pub struct TaskState {
@@ -140,7 +140,7 @@ impl<T: Clone + Send + 'static> Clone for TaskResult<T> {
 }
 
 impl<T: Clone + Send + 'static> TaskResult<T> {
-    pub fn try_get_cloned(&self) -> Option<T>
+    pub fn try_clone_result(&self) -> Option<T>
     where
         T: Send + 'static,
     {
@@ -151,7 +151,7 @@ impl<T: Clone + Send + 'static> TaskResult<T> {
         }
     }
 
-    pub fn get_cloned(&self) -> T
+    pub fn clone_result(&self) -> T
     where
         T: Send + 'static,
     {
@@ -171,7 +171,7 @@ impl<T: Clone + Send + 'static> TaskResult<T> {
 }
 
 impl<T: Send + 'static> TaskResult<T> {
-    pub fn null() -> Self {
+    pub fn placeholder() -> Self {
         Self {
             id: TaskId::INVALID,
             state: Arc::new(TaskState {
@@ -183,7 +183,7 @@ impl<T: Send + 'static> TaskResult<T> {
         }
     }
 
-    pub(crate) fn from(state: Arc<TaskState>, id: TaskId) -> Self {
+    pub(crate) fn from_task(state: Arc<TaskState>, id: TaskId) -> Self {
         Self {
             state,
             id,
@@ -191,15 +191,17 @@ impl<T: Send + 'static> TaskResult<T> {
         }
     }
 
+    #[inline]
     pub fn completed(&self) -> bool {
         self.state.completed.load(Ordering::Acquire)
     }
 
+    #[inline]
     pub fn wait(&self) {
         self.state.wait();
     }
 
-    pub fn try_get(&self) -> Option<T>
+    pub fn try_into_result(&self) -> Option<T>
     where
         T: Send + 'static,
     {
@@ -216,7 +218,7 @@ impl<T: Send + 'static> TaskResult<T> {
         }
     }
 
-    pub fn get(self) -> T
+    pub fn into_result(self) -> T
     where
         T: Send + 'static,
     {
@@ -232,11 +234,12 @@ impl<T: Send + 'static> TaskResult<T> {
         }
     }
 
+    #[inline]
     pub fn id(&self) -> TaskId {
         self.id
     }
 
-    pub fn forget_result(self) -> TaskHandle {
+    pub fn into_handle(self) -> TaskHandle {
         TaskHandle {
             id: self.id,
             state: self.state,
@@ -245,8 +248,8 @@ impl<T: Send + 'static> TaskResult<T> {
 }
 
 impl<T: Send + 'static> AsTaskState for TaskResult<T> {
-    fn as_state(&self) -> Arc<TaskState> {
-        self.state.clone()
+    fn as_state(&self) -> &Arc<TaskState> {
+        &self.state
     }
 }
 
@@ -256,7 +259,7 @@ pub struct TaskHandle {
 }
 
 impl TaskHandle {
-    pub fn null() -> Self {
+    pub fn placeholder() -> Self {
         Self {
             id: TaskId::INVALID,
             state: Arc::new(TaskState {
@@ -267,21 +270,24 @@ impl TaskHandle {
         }
     }
 
+    #[inline]
     pub fn completed(&self) -> bool {
         self.state.completed.load(Ordering::Acquire)
     }
 
+    #[inline]
     pub fn wait(&self) {
         self.state.wait()
     }
 
+    #[inline]
     pub fn id(&self) -> TaskId {
         self.id
     }
 }
 
 impl AsTaskState for TaskHandle {
-    fn as_state(&self) -> Arc<TaskState> {
-        self.state.clone()
+    fn as_state(&self) -> &Arc<TaskState> {
+        &self.state
     }
 }

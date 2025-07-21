@@ -24,7 +24,7 @@ impl<T: Send + 'static> AsyncTaskHandle<T> {
 
     pub fn null() -> Self {
         Self {
-            result: TaskResult::null(),
+            result: TaskResult::placeholder(),
             waker_registry: Default::default(),
         }
     }
@@ -43,7 +43,7 @@ impl<T: Send + 'static> AsyncTaskHandle<T> {
 }
 
 impl<T: Send + 'static> AsTaskState for AsyncTaskHandle<T> {
-    fn as_state(&self) -> Arc<TaskState> {
+    fn as_state(&self) -> &Arc<TaskState> {
         self.result.as_state()
     }
 }
@@ -54,7 +54,7 @@ impl<T: Send + 'static> Future for AsyncTaskHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let handle = self.project();
         
-        if let Some(result) = handle.result.try_get() {
+        if let Some(result) = handle.result.try_into_result() {
             Poll::Ready(result)
         } else {
             handle.waker_registry.register_waker(handle.result.id(), cx.waker().clone());
