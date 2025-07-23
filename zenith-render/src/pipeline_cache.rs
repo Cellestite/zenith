@@ -1,5 +1,6 @@
 ﻿use std::hash::{Hash, Hasher};
-use zenith_core::collections::{DefaultHasher, Entry, HashMap};
+use zenith_core::collections::{DefaultHasher};
+use zenith_core::collections::hashmap::{Entry, HashMap};
 use crate::shader::{GraphicShader};
 
 pub struct PipelineCache {

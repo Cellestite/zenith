@@ -5,3 +5,5 @@ mod device;
 pub use shader::{GraphicShader};
 pub use device::RenderDevice;
 pub use pipeline_cache::PipelineCache;
+
+pub use seq_macro::seq;

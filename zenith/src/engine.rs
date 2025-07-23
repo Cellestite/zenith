@@ -2,7 +2,7 @@
 use winit::window::Window;
 use zenith_render::{RenderDevice, PipelineCache};
 use zenith_rendergraph::{RenderGraphBuilder, SharedRenderGraphResource, TextureState};
-use crate::{RenderableApp};
+use crate::RenderableApp;
 
 pub struct Engine {
     pub render_device: RenderDevice,
@@ -12,7 +12,7 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub async fn init(main_window: Arc<Window>) -> Result<Self, anyhow::Error> {
+    pub async fn new(main_window: Arc<Window>) -> Result<Self, anyhow::Error> {
         let render_device = RenderDevice::new(main_window.clone()).await?;
         let pipeline_cache = PipelineCache::new();
 

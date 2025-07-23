@@ -6,13 +6,9 @@ description = "Sandbox application for Zenith engine"
 license = "MIT"
 
 [dependencies]
-pollster.workspace = true
 winit.workspace = true
 log.workspace = true
 anyhow.workspace = true
 glam.workspace = true
 
 zenith = { path = "../zenith" }
-zenith-core = { path = "../zenith-core" }
-zenith-renderer = { path = "../zenith-renderer" }
-zenith-rendergraph = { path = "../zenith-rendergraph" }

@@ -5,13 +5,13 @@ edition = "2021"
 
 [dependencies]
 winit = { workspace = true }
-pollster = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 glam = { workspace = true }
 wgpu = { workspace = true }
 
 zenith-core = { path = "../zenith-core" }
+zenith-task = { path = "../zenith-task" }
 zenith-render = { path = "../zenith-render" }
 zenith-renderer = { path = "../zenith-renderer" }
 zenith-rendergraph = { path = "../zenith-rendergraph" }

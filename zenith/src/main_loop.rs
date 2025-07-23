@@ -4,10 +4,11 @@ use winit::application::ApplicationHandler;
 use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{WindowAttributes, WindowId};
+use zenith_task::block_on;
 use crate::app::RenderableApp;
 use crate::Engine;
 
-struct EventForwarder<A: RenderableApp> {
+struct EventForwarder<A> {
     engine: Option<Engine>,
     app: Option<A>,
 
@@ -25,13 +26,15 @@ impl<A: RenderableApp> EventForwarder<A> {
     }
 }
 
-pub struct ZenithEngineLoop<A: RenderableApp> {
+pub struct ZenithEngineLoop<A> {
     event_loop: EventLoop<()>,
     event_forwarder: EventForwarder<A>
 }
 
 impl<A: RenderableApp> ZenithEngineLoop<A> {
     pub(super) fn new() -> Result<Self, anyhow::Error> {
+        zenith_core::log::initialize()?;
+
         Ok(Self {
             event_loop: EventLoop::new()?,
             event_forwarder: EventForwarder::new(),
@@ -64,11 +67,14 @@ impl<A: RenderableApp> ApplicationHandler for EventForwarder<A> {
         let window = Arc::new(event_loop.create_window(window_attributes)
             .expect("Failed to create window."));
 
-        let (engine, app) = pollster::block_on(async {
-            let mut engine = Engine::init(window.clone()).await
+        let (engine, app) = block_on(async {
+            let mut app = A::new(window.clone()).await
+                .expect("Failed to initialize app");
+
+            let mut engine = Engine::new(window.clone()).await
                 .expect("Failed to initialize zenith engine.");
 
-            let mut app = A::init(&mut engine).await
+            app.prepare(&mut engine.render_device)
                 .expect("Failed to initialize zenith application.");
             app.resize(window.inner_size().width, window.inner_size().height);
 
@@ -85,6 +91,9 @@ impl<A: RenderableApp> ApplicationHandler for EventForwarder<A> {
                     _window_id: WindowId,
                     event: WindowEvent
     ) {
+        let engine = self.engine.as_mut().unwrap();
+        let app = self.app.as_mut().unwrap();
+
         match event {
             WindowEvent::Resized(new_size) => {
                 if self.is_initializing {
@@ -92,22 +101,20 @@ impl<A: RenderableApp> ApplicationHandler for EventForwarder<A> {
                 }
 
                 debug!("system event resize: {}x{}", new_size.width, new_size.height);
-                let engine = self.engine.as_mut().unwrap();
 
                 engine.resize(new_size.width, new_size.height);
-                self.app.as_mut().unwrap().resize(new_size.width, new_size.height);
+                app.resize(new_size.width, new_size.height);
                 engine.main_window.request_redraw();
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                let app = self.app.as_mut().unwrap();
-                self.engine.as_mut().unwrap().render(app);
+                engine.render(app);
             }
             _ => {
-                self.engine.as_mut().unwrap().update(0.0);
-                self.app.as_mut().unwrap().update(0.0);
+                engine.update(0.0);
+                app.tick(0.0);
             }
         }
     }

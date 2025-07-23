@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use log::warn;
-use crate::node::{ColorInfoBuilder, NodePipelineState, RenderGraphNode};
+use crate::node::{NodePipelineState, RenderGraphNode};
 use crate::graph::{GraphicNodeExecutionContext, LambdaNodeExecutionContext, RenderGraph, ResourceStorage};
 use crate::node::{DepthStencilInfo};
 use crate::interface::{GraphResourceAccess, ResourceDescriptor, SharedRenderGraphResource, Texture};
@@ -12,7 +12,7 @@ use crate::resource::{
     GraphResourceId, InitialResourceStorage,
     RenderGraphResource, RenderGraphResourceAccess, Rt, Srv, Uav};
 use zenith_render::GraphicShader;
-use crate::GraphicPipelineDescriptor;
+use crate::{ColorInfo, GraphicPipelineDescriptor};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ResourceAccessStorage {
@@ -331,8 +331,8 @@ impl<'a> GraphicPipelineBuilder<'a> {
     }
 
     #[inline]
-    pub fn with_color(self, color: RenderGraphResourceAccess<Texture, Rt>, color_info: ColorInfoBuilder) -> Self {
-        self.pipeline_desc.color_attachments.push((color, color_info.build().unwrap()));
+    pub fn with_color(self, color: RenderGraphResourceAccess<Texture, Rt>, color_info: ColorInfo) -> Self {
+        self.pipeline_desc.color_attachments.push((color, color_info));
         self
     }
 

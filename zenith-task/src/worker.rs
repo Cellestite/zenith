@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use crossbeam_queue::SegQueue;
 use parking_lot::{Mutex};
-use zenith_core::collections::HashMap;
+use zenith_core::collections::hashmap::HashMap;
 use crate::executor::{QueuedTask, ThreadLocalState, UntypedCompletedFunc};
 use crate::async_task::WakerRegistry;
 use crate::task::{BoxedTask, TaskId};

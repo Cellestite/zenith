@@ -12,7 +12,8 @@ use std::future::{IntoFuture};
 use std::sync::LazyLock;
 use crate::async_task::{AsyncTask, AsyncTaskHandle};
 use crate::executor::TaskExecutor;
-use crate::task::{AsTaskState, Task, TaskResult};
+use crate::task::{AsTaskState, Task};
+pub use task::{TaskId, TaskResult, TaskHandle};
 
 static UNIVERSAL_EXECUTOR: LazyLock<TaskExecutor> = LazyLock::new(|| {
     TaskExecutor::default()
@@ -57,9 +58,9 @@ where
     UNIVERSAL_EXECUTOR.submit_to_after(thread_name, task, dependencies)
 }
 
-pub fn block_on<F: IntoFuture>(future: F) {
+pub fn block_on<F: IntoFuture>(future: F) -> F::Output {
     // TODO: true async executor, this will block the thread in thread pool
-    pollster::block_on(future);
+    pollster::block_on(future)
 }
 
 pub fn spawn<F>(future: F) -> AsyncTaskHandle<F::Output>
@@ -183,7 +184,7 @@ mod tests {
 
         let result = handles
             .into_iter()
-            .map(|handle| handle.into_result())
+            .map(|handle| handle.get_result())
             .fold(0, |acc, val| acc + val);
 
         let duration = start_time.elapsed();
@@ -275,7 +276,7 @@ mod tests {
             result
         });
 
-        let result = handle.into_result();
+        let result = handle.get_result();
         println!("Task finished: {}", result);
 
         assert_eq!(result, 84);
@@ -297,7 +298,7 @@ mod tests {
 
         let mut results = Vec::new();
         for handle in handles {
-            let result = handle.into_result();
+            let result = handle.get_result();
             results.push(result);
         }
 
@@ -361,7 +362,7 @@ mod tests {
 
         let mut results = Vec::new();
         for handle in handles {
-            results.push(handle.into_result());
+            results.push(handle.get_result());
         }
 
         println!("Result: {:?}", results);

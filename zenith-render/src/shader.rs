@@ -4,6 +4,37 @@ use zenith_core::collections::SmallVec;
 
 pub const SHADER_ASSET_ABSOLUTE_DIR: &str = include_absolute_path::include_absolute_path!("../../zenith-build/shader");
 
+#[macro_export]
+macro_rules! define_shader {
+    ($(let $name:ident = Graphic($module:ident, $path:expr, $entry:expr, $step_mode:expr, $num_color_outputs:expr, $num_bindgroup:expr)),*) => {
+        $(
+            let vs_entry = zenith_build::$module::vs_main_entry($step_mode);
+            let dummy_targets: [Option<wgpu::ColorTargetState>; $num_color_outputs] = [None; $num_color_outputs];
+            let ps_entry = zenith_build::$module::fs_main_entry(dummy_targets);
+            let mut bind_group_layouts: SmallVec<[wgpu::BindGroupLayoutDescriptor<'static>; 4]> = SmallVec::new();
+            $crate::seq!(N in 0..$num_bindgroup {
+                bind_group_layouts.push(zenith_build::$module::WgpuBindGroup~N::LAYOUT_DESCRIPTOR);
+            });
+
+            let $name = GraphicShader::new(
+                $path,
+                $entry,
+
+                vs_entry.entry_point,
+                vs_entry.buffers.to_vec(),
+                vs_entry.constants.to_vec(),
+
+                ps_entry.entry_point,
+                ps_entry.constants.to_vec(),
+                ps_entry.targets.len() as u32,
+                false,
+
+                bind_group_layouts,
+            );
+        )*
+    };
+}
+
 // TODO: robust shader hash
 pub struct GraphicShader {
     name: String,

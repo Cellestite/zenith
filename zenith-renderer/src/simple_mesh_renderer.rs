@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 use zenith_build::{ShaderEntry};
 use zenith_core::asset_loader::{MeshData, ModelData};
 use zenith_core::collections::SmallVec;
-use zenith_render::{GraphicShader, RenderDevice};
+use zenith_render::{define_shader, GraphicShader, RenderDevice};
 use zenith_rendergraph::{Buffer, RenderGraphBuilder, RenderGraphResource, SharedRenderGraphResource, Texture, TextureDesc};
 
 pub struct SimpleMeshRenderer {
@@ -64,29 +64,12 @@ impl SimpleMeshRenderer {
     }
     
     fn create_shader() -> GraphicShader {
-        let vs_entry = zenith_build::mesh::vs_main_entry(wgpu::VertexStepMode::Vertex);
-        let dummy_targets: Vec<Option<wgpu::ColorTargetState>> = vec![None; 1];
-        let ps_entry = zenith_build::mesh::fs_main_entry(dummy_targets.clone().try_into().unwrap());
-        let mut bind_group_layouts: SmallVec<[wgpu::BindGroupLayoutDescriptor<'static>; 4]> = SmallVec::new();
-        bind_group_layouts.push(zenith_build::mesh::WgpuBindGroup0::LAYOUT_DESCRIPTOR);
-
-        GraphicShader::new(
-            "mesh.wgsl",
-            ShaderEntry::Mesh,
-
-            vs_entry.entry_point,
-            vs_entry.buffers.to_vec(),
-            vs_entry.constants.to_vec(),
-
-            ps_entry.entry_point,
-            ps_entry.constants.to_vec(),
-            ps_entry.targets.len() as u32,
-            false,
-
-            bind_group_layouts,
-        ).unwrap()
+        define_shader! {
+            let shader = Graphic(mesh, "mesh.wgsl", ShaderEntry::Mesh, wgpu::VertexStepMode::Vertex, 1, 1)
+        }
+        shader.unwrap()
     }
-    
+
     pub fn build_render_graph(
         &self, 
         builder: &mut RenderGraphBuilder, 

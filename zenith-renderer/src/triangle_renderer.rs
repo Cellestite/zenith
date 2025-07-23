@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 use zenith_build::triangle::{self, VertexInput as Vertex};
 use zenith_build::{ShaderEntry};
 use zenith_core::collections::SmallVec;
-use zenith_render::{GraphicShader, RenderDevice};
+use zenith_render::{define_shader, GraphicShader, RenderDevice};
 use zenith_rendergraph::{Buffer, BufferDesc, ColorInfoBuilder, RenderGraphBuilder, RenderGraphResource, SharedRenderGraphResource, Texture, TextureDesc};
 
 pub struct TriangleRenderer {
@@ -35,27 +35,10 @@ impl TriangleRenderer {
             usage: wgpu::BufferUsages::INDEX,
         }));
 
-        let vs_entry = triangle::vs_main_entry(wgpu::VertexStepMode::Vertex);
-        let dummy_targets: [Option<wgpu::ColorTargetState>; 1] = [None; 1];
-        let ps_entry = triangle::fs_main_entry(dummy_targets);
-        let mut bind_group_layouts: SmallVec<[wgpu::BindGroupLayoutDescriptor<'static>; 4]> = SmallVec::new();
-        bind_group_layouts.push(triangle::WgpuBindGroup0::LAYOUT_DESCRIPTOR);
-
-        let shader = Arc::new(GraphicShader::new(
-            "triangle.wgsl",
-            ShaderEntry::Triangle,
-
-            vs_entry.entry_point,
-            vs_entry.buffers.to_vec(),
-            vs_entry.constants.to_vec(),
-
-            ps_entry.entry_point,
-            ps_entry.constants.to_vec(),
-            ps_entry.targets.len() as u32,
-            false,
-
-            bind_group_layouts,
-        ).unwrap());
+        define_shader! {
+            let shader = Graphic(triangle, "triangle.wgsl", ShaderEntry::Triangle, wgpu::VertexStepMode::Vertex, 1, 1)
+        }
+        let shader = Arc::new(shader.unwrap());
 
         Self {
             vertex_buffer,
@@ -101,7 +84,7 @@ impl TriangleRenderer {
 
             node.setup_pipeline()
                 .with_shader(self.shader.clone())
-                .with_color(output, ColorInfoBuilder::default());
+                .with_color(output, ColorInfoBuilder::default().build().unwrap());
 
             let start_time = self.start_time;
 

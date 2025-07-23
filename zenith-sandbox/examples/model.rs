@@ -1,45 +1,49 @@
-﻿use log::{info};
+﻿use log::{error, info};
 use std::env;
 use std::sync::{Arc, Weak};
 use winit::window::Window;
-use zenith_core::asset_loader::GltfLoader;
-use zenith_renderer::SimpleMeshRenderer;
-use zenith_rendergraph::{RenderGraphBuilder, RenderGraphResource, Texture};
-use zenith::{launch, App, RenderableApp, Engine};
+use zenith::{launch, App, RenderableApp, block_on, RenderGraphBuilder, RenderGraphResource, Texture, SimpleMeshRenderer, RenderDevice, TaskResult, submit};
+use zenith::asset_loader::{GltfLoader, ModelData};
 
 pub struct GltfRendererApp {
+    load_task: TaskResult<anyhow::Result<ModelData>>,
     main_window: Weak<Window>,
-    mesh_renderer: SimpleMeshRenderer,
+    mesh_renderer: Option<SimpleMeshRenderer>,
 }
 
 impl App for GltfRendererApp {
-    async fn init(engine: &mut Engine) -> Result<Self, anyhow::Error> {
+    async fn new(main_window: Arc<Window>) -> Result<Self, anyhow::Error> {
         let args: Vec<String> = env::args().collect();
         if args.len() != 2 {
-            eprintln!("用法: {} <gltf文件路径>", args[0]);
-            eprintln!("示例: {} content/mesh/cerberus/scene.gltf", args[0]);
+            error!("用法: {} <gltf文件路径>", args[0]);
+            error!("示例: {} content/mesh/cerberus/scene.gltf", args[0]);
             std::process::exit(1);
         }
 
-        let gltf_path = &args[1];
-
-        info!("加载 GLTF 模型: {}", gltf_path);
-        let model = GltfLoader::load_from_file(gltf_path)?;
-        info!("成功加载模型，包含 {} 个网格", model.meshes.len());
-
-        let mut mesh_renderer = SimpleMeshRenderer::from_model(&engine.render_device, &model);
-        mesh_renderer.set_base_color([0.7, 0.5, 0.3]); // 设置为暖色调
-
-        info!("GLTF 渲染器初始化完成");
+        let gltf_path = args[1].clone();
+        let load_task = submit(|| {
+            info!("Worker thread: {:?} reading gltf...", std::thread::current().name());
+            GltfLoader::load_from_file(gltf_path)
+        });
 
         Ok(Self {
-            main_window: Arc::downgrade(&engine.main_window),
-            mesh_renderer,
+            load_task,
+            main_window: Arc::downgrade(&main_window),
+            mesh_renderer: None,
         })
     }
 }
 
 impl RenderableApp for GltfRendererApp {
+    fn prepare(&mut self, render_device: &mut RenderDevice) -> Result<(), anyhow::Error> {
+        let model = self.load_task.get_result()?;
+        let mut mesh_renderer = SimpleMeshRenderer::from_model(&render_device, &model);
+        mesh_renderer.set_base_color([0.7, 0.5, 0.3]);
+
+        self.mesh_renderer = Some(mesh_renderer);
+        Ok(())
+    }
+
     fn render(&mut self, builder: &mut RenderGraphBuilder) -> Option<RenderGraphResource<Texture>> {
         let (width, height) = if let Some(window) = self.main_window.upgrade() {
             (window.inner_size().width, window.inner_size().height)
@@ -62,7 +66,7 @@ impl RenderableApp for GltfRendererApp {
             1000.0
         );
 
-        Some(self.mesh_renderer.build_render_graph(
+        Some(self.mesh_renderer.as_ref().unwrap().build_render_graph(
             builder,
             view_matrix,
             proj_matrix,
@@ -74,7 +78,7 @@ impl RenderableApp for GltfRendererApp {
 }
 
 fn main() {
-    let engine_loop = pollster::block_on(launch::<GltfRendererApp>()).unwrap();
+    let engine_loop = block_on(launch::<GltfRendererApp>()).unwrap();
 
     engine_loop
         .run()

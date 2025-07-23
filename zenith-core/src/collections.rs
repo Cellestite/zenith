@@ -4,11 +4,17 @@ use foldhash::SharedSeed;
 
 pub type SmallVec<A> = smallvec::SmallVec<A>;
 
-pub type HashMap<K, V> = hashbrown::HashMap<K, V>;
-pub type Entry<'a, K, V, S, A> = hashbrown::hash_map::Entry<'a, K, V, S, A>;
-pub type HashSet<K, V> = hashbrown::HashSet<K, V>;
-
 pub struct DefaultHasher(FoldHasher);
+
+pub mod hashmap {
+    pub type HashMap<K, V> = hashbrown::HashMap<K, V>;
+    pub use hashbrown::hash_map::*;
+}
+
+pub mod hashset {
+    pub type HashSet<K, V> = hashbrown::HashSet<K, V>;
+    pub use hashbrown::hash_set::*;
+}
 
 impl DefaultHasher {
     pub fn new() -> Self {

@@ -9,8 +9,7 @@ winit.workspace = true
 anyhow.workspace = true
 naga_oil.workspace = true
 include_absolute_path.workspace = true
-bytemuck.workspace = true
-glam.workspace = true
+seq-macro.workspace = true
 
 zenith-core = { path = "../zenith-core" }
 zenith-build = { path = "../zenith-build" }

@@ -5,11 +5,11 @@ use std::sync::Arc;
 use parking_lot::{RwLock};
 use pin_project::pin_project;
 use futures::{FutureExt, future::BoxFuture};
-use zenith_core::collections::HashMap;
+use zenith_core::collections::hashmap::HashMap;
 use crate::task::{AsTaskState, TaskId, TaskResult, TaskState};
 
 #[pin_project]
-pub struct AsyncTaskHandle<T: Send + 'static> {
+pub struct AsyncTaskHandle<T> {
     result: TaskResult<T>,
     waker_registry: Arc<WakerRegistry>,
 }
@@ -22,7 +22,7 @@ impl<T: Send + 'static> AsyncTaskHandle<T> {
         }
     }
 
-    pub fn null() -> Self {
+    pub fn placeholder() -> Self {
         Self {
             result: TaskResult::placeholder(),
             waker_registry: Default::default(),
@@ -54,7 +54,8 @@ impl<T: Send + 'static> Future for AsyncTaskHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let handle = self.project();
         
-        if let Some(result) = handle.result.try_into_result() {
+        if handle.result.completed() {
+            let result = handle.result.get_result();
             Poll::Ready(result)
         } else {
             handle.waker_registry.register_waker(handle.result.id(), cx.waker().clone());

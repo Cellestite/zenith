@@ -7,7 +7,7 @@ use crate::interface::Texture;
 use crate::resource::{RenderGraphResourceAccess, Rt};
 
 #[derive(Default, Debug, Builder)]
-#[builder(setter(into), pattern = "owned")]
+#[builder(setter(into))]
 pub struct ColorInfo {
     #[builder(default)]
     pub blend: Option<wgpu::BlendState>,

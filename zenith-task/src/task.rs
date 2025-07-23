@@ -123,7 +123,7 @@ impl TaskState {
     }
 }
 
-pub struct TaskResult<T: Send + 'static> {
+pub struct TaskResult<T> {
     id: TaskId,
     state: Arc<TaskState>,
     _phantom: std::marker::PhantomData<T>,
@@ -201,24 +201,7 @@ impl<T: Send + 'static> TaskResult<T> {
         self.state.wait();
     }
 
-    pub fn try_into_result(&self) -> Option<T>
-    where
-        T: Send + 'static,
-    {
-        if self.state.completed.load(Ordering::Acquire) {
-            let mut result = self.state.result.lock();
-
-            if result.is_none() {
-                return None;
-            }
-
-            result.take()?.downcast().ok().map(|boxed| *boxed)
-        } else {
-            None
-        }
-    }
-
-    pub fn into_result(self) -> T
+    pub fn get_result(&self) -> T
     where
         T: Send + 'static,
     {
