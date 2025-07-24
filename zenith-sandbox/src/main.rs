@@ -3,29 +3,30 @@ use winit::window::Window;
 use zenith::{block_on, launch, App, RenderDevice, RenderGraphBuilder, RenderGraphResource, RenderableApp, Texture, TriangleRenderer};
 
 pub struct TriangleApp {
-    window: Weak<Window>,
+    window: Option<Weak<Window>>,
     renderer: Option<TriangleRenderer>,
 }
 
 impl App for TriangleApp {
-    async fn new(main_window: Arc<Window>) -> Result<Self, anyhow::Error> {
+    async fn new() -> Result<Self, anyhow::Error> {
         Ok(Self {
-            window: Arc::downgrade(&main_window),
+            window: None,
             renderer: None,
         })
     }
 }
 
 impl RenderableApp for TriangleApp {
-    fn prepare(&mut self, render_device: &mut RenderDevice) -> Result<(), anyhow::Error> {
+    fn prepare(&mut self, render_device: &mut RenderDevice, main_window: Arc<Window>) -> Result<(), anyhow::Error> {
         let triangle_renderer = TriangleRenderer::new(&render_device);
 
+        self.window = Some(Arc::downgrade(&main_window));
         self.renderer = Some(triangle_renderer);
         Ok(())
     }
 
     fn render(&mut self, builder: &mut RenderGraphBuilder) -> Option<RenderGraphResource<Texture>> {
-        let (width, height) = if let Some(window) = self.window.upgrade() {
+        let (width, height) = if let Some(window) = self.window.as_ref().and_then(|window| window.upgrade()) {
             (window.inner_size().width, window.inner_size().height)
         } else {
             return None;

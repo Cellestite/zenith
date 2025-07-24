@@ -7,8 +7,8 @@ edition = "2021"
 winit = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
-glam = { workspace = true }
-wgpu = { workspace = true }
+wgpu = { workspace = true } 
+glam.workspace = true
 
 zenith-core = { path = "../zenith-core" }
 zenith-task = { path = "../zenith-task" }

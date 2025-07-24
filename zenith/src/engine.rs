@@ -24,7 +24,7 @@ impl Engine {
         })
     }
 
-    pub fn update(&mut self, _delta_time: f32) {
+    pub fn tick(&mut self, _delta_time: f32) {
     }
 
     pub fn render<A: RenderableApp>(&mut self, app: &mut A) {

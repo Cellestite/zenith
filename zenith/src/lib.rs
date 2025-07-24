@@ -1,4 +1,4 @@
-use crate::main_loop::ZenithEngineLoop;
+use crate::main_loop::EngineLoop;
 
 mod engine;
 mod main_loop;
@@ -22,7 +22,7 @@ pub use zenith_renderer::*;
 // zenith-rendergraph
 pub use zenith_rendergraph::*;
 
-pub async fn launch<A: RenderableApp>() -> Result<ZenithEngineLoop<A>, anyhow::Error> {
-    let main_loop = ZenithEngineLoop::new()?;
+pub async fn launch<A: RenderableApp>() -> Result<EngineLoop<A>, anyhow::Error> {
+    let main_loop = EngineLoop::new()?;
     Ok(main_loop)
 }
