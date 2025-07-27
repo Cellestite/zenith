@@ -1,6 +1,5 @@
-﻿use std::f32::consts::{FRAC_PI_2, PI};
-use glam::{EulerRot, Mat3, Mat4, Quat, Vec3, Vec4};
-use log::{info, warn};
+﻿use glam::{EulerRot, Mat4, Quat, Vec3};
+use log::{warn};
 use winit::event::{DeviceEvent, ElementState, MouseButton, WindowEvent};
 use winit::window::{CursorGrabMode, Window};
 use crate::input::InputActionMapper;
@@ -220,12 +219,12 @@ impl CameraController {
         self.accum_local_yaw -= delta_yaw;
         self.accum_local_pitch -= delta_pitch;
 
-        let key_inputs = Vec3::new(
+        let axis_dir = Vec3::new(
             mapper.get_axis("strafe"),
             mapper.get_axis("walk"),
             mapper.get_axis("lift"),
         );
-        let delta_pos = key_inputs * self.move_speed * delta_time;
+        let delta_pos = axis_dir * self.move_speed * delta_time;
 
         for camera in to_update_cameras {
             camera.rotate(delta_yaw, delta_pitch, self.max_pitch_angle);
