@@ -3,6 +3,7 @@ use std::sync::Arc;
 use glam::Vec2;
 use winit::event::MouseButton;
 use winit::window::Window;
+use zenith_core::system_event::SystemEventCollector;
 use zenith_render::RenderDevice;
 use zenith_rendergraph::{RenderGraphBuilder, RenderGraphResource, Texture};
 
@@ -11,6 +12,7 @@ pub trait App: Sized + 'static {
     fn on_key_input(&mut self, _name: Option<&str>, _is_pressed: bool) {}
     fn on_mouse_input(&mut self, _button: &MouseButton, _is_pressed: bool) {}
     fn on_mouse_moved(&mut self, _delta: &Vec2) {}
+    fn process_event(&mut self, _collector: &SystemEventCollector) {}
     fn tick(&mut self, _delta_time: f32) {}
 }
 

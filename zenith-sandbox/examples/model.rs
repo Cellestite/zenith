@@ -1,12 +1,14 @@
-﻿use log::{error, info, warn};
+﻿use log::{error, info};
 use std::env;
 use std::sync::{Arc, Weak};
-use glam::{Quat, Vec2, Vec3};
-use winit::event::MouseButton;
+use glam::{Quat, Vec3};
+use winit::keyboard::KeyCode;
 use winit::window::Window;
 use zenith::{launch, App, RenderableApp, block_on, RenderGraphBuilder, RenderGraphResource, Texture, SimpleMeshRenderer, RenderDevice, TaskResult, submit};
 use zenith::asset_loader::{GltfLoader, ModelData};
-use zenith::camera::Camera;
+use zenith::camera::{Camera, CameraController};
+use zenith::input::InputActionMapper;
+use zenith::system_event::SystemEventCollector;
 
 pub struct GltfRendererApp {
     load_task: TaskResult<anyhow::Result<ModelData>>,
@@ -14,9 +16,9 @@ pub struct GltfRendererApp {
     mesh_renderer: Option<SimpleMeshRenderer>,
 
     camera: Camera,
-    delta_translation: Vec3,
-    delta_rotation: Vec2,
-    should_apply_rotation: bool,
+    controller: CameraController,
+
+    mapper: InputActionMapper,
 }
 
 impl App for GltfRendererApp {
@@ -34,70 +36,33 @@ impl App for GltfRendererApp {
             GltfLoader::load_from_file(gltf_path)
         });
 
+        let mut mapper = InputActionMapper::new();
+        mapper.register_axis("strafe", [KeyCode::KeyD], [KeyCode::KeyA], 0.5);
+        mapper.register_axis("walk", [KeyCode::KeyW], [KeyCode::KeyS], 0.5);
+        mapper.register_axis("lift", [KeyCode::KeyE], [KeyCode::KeyQ], 0.5);
+
         Ok(Self {
             load_task,
             main_window: None,
             mesh_renderer: None,
             
             camera: Default::default(),
-            delta_translation: Default::default(),
-            delta_rotation: Default::default(),
+            controller: Default::default(),
 
-            should_apply_rotation: false,
+            mapper,
         })
     }
 
-    fn on_key_input(&mut self, name: Option<&str>, is_pressed: bool) {
-        if !is_pressed {
-            return;
+    fn process_event(&mut self, collector: &SystemEventCollector) {
+        self.mapper.process_event(collector);
+        if let Some(window) = self.main_window.as_ref().and_then(|window| window.upgrade()) {
+            self.controller.process_event(collector, &window);
         }
-
-        if name.is_none() {
-            warn!("Unknown input key!");
-            return;
-        }
-
-        let name = unsafe { name.unwrap_unchecked() };
-        if name == "a" {
-            self.delta_translation.x -= 30.;
-        } else if name == "d" {
-            self.delta_translation.x += 0.01;
-        } else if name == "w" {
-            self.delta_translation.y += 0.01;
-        } else if name == "s" {
-            self.delta_translation.y -= 0.01;
-        } else if name == "q" {
-            self.delta_translation.z += 0.01;
-        } else if name == "e" {
-            self.delta_translation.z -= 0.01;
-        }
-    }
-
-    fn on_mouse_input(&mut self, button: &MouseButton, is_pressed: bool) {
-        match button {
-            MouseButton::Left if is_pressed => { self.should_apply_rotation = true; }
-            MouseButton::Left if !is_pressed => { self.should_apply_rotation = false; }
-            _ => {}
-        }
-    }
-
-    fn on_mouse_moved(&mut self, delta: &Vec2) {
-        self.delta_rotation = delta * 0.004;
     }
 
     fn tick(&mut self, delta_time: f32) {
-        self.delta_translation *= delta_time;
-        self.camera.translation(self.delta_translation);
-
-        if self.should_apply_rotation {
-            self.delta_rotation *= delta_time;
-
-            self.camera.rotate_yaw(self.delta_rotation.x.into());
-            self.camera.rotate_pitch(self.delta_rotation.y.into());
-        }
-
-        self.delta_translation = Vec3::ZERO;
-        self.delta_rotation = Vec2::ZERO;
+        self.mapper.tick(delta_time);
+        self.controller.update_cameras(delta_time, &self.mapper, [&mut self.camera]);
     }
 }
 

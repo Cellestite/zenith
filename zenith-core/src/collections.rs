@@ -12,7 +12,7 @@ pub mod hashmap {
 }
 
 pub mod hashset {
-    pub type HashSet<K, V> = hashbrown::HashSet<K, V>;
+    pub type HashSet<T> = hashbrown::HashSet<T>;
     pub use hashbrown::hash_set::*;
 }
 

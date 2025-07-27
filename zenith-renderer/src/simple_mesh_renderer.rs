@@ -32,7 +32,7 @@ impl SimpleMeshRenderer {
         Self {
             meshes,
             shader: Arc::new(shader),
-            base_color: [0.8, 0.8, 0.8], // 默认灰色
+            base_color: [0.8, 0.8, 0.8],
         }
     }
 
@@ -93,24 +93,21 @@ impl SimpleMeshRenderer {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[wgpu::TextureFormat::Bgra8UnormSrgb],
         });
-
-        // 创建 view uniform 缓冲区
-        let view_uniform = builder.create("mesh.view_uniform", wgpu::BufferDescriptor {
-            label: Some("View Uniform Buffer"),
-            size: std::mem::size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress,
+        
+        let view_uniform = builder.create("mesh.camera_uniform", wgpu::BufferDescriptor {
+            label: Some("Camera Uniform Buffer"),
+            size: size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        // 创建 model uniform 缓冲区
         let model_uniform = builder.create("mesh.model_uniform", wgpu::BufferDescriptor {
             label: Some("Model Uniform Buffer"),
-            size: (std::mem::size_of::<[[f32; 4]; 4]>() + std::mem::size_of::<[f32; 3]>() + 4) as wgpu::BufferAddress, // 添加 padding
+            size: (size_of::<[[f32; 4]; 4]>() + size_of::<[f32; 3]>() + 4) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-
-        // 导入所有网格缓冲区
+        
         let mesh_resources: Vec<_> = self.meshes.iter().enumerate().map(|(i, mesh)| {
             let vb = builder.import(
                 &format!("mesh.vertex.{}", i), 

@@ -5,10 +5,10 @@ use zenith_rendergraph::{RenderGraphBuilder, SharedRenderGraphResource, TextureS
 use crate::RenderableApp;
 
 pub struct Engine {
-    pub render_device: RenderDevice,
-    pipeline_cache: PipelineCache,
-
     pub main_window: Arc<Window>,
+    pub render_device: RenderDevice,
+    
+    pipeline_cache: PipelineCache,
 }
 
 impl Engine {
@@ -17,10 +17,10 @@ impl Engine {
         let pipeline_cache = PipelineCache::new();
 
         Ok(Self {
-            render_device,
-            pipeline_cache,
-
             main_window,
+            render_device,
+
+            pipeline_cache,
         })
     }
 
