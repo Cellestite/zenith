@@ -5,9 +5,3 @@ pub mod camera;
 mod math;
 pub mod input;
 pub mod system_event;
-
-pub mod asset_loader {
-    mod gltf_loader;
-
-    pub use gltf_loader::{GltfLoader, MeshData, ModelData};
-}

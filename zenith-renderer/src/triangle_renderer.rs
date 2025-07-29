@@ -4,11 +4,11 @@ use zenith_build::triangle::{self, VertexInput as Vertex};
 use zenith_build::{ShaderEntry};
 use zenith_core::collections::SmallVec;
 use zenith_render::{define_shader, GraphicShader, RenderDevice};
-use zenith_rendergraph::{Buffer, BufferDesc, ColorInfoBuilder, RenderGraphBuilder, RenderGraphResource, SharedRenderGraphResource, Texture, TextureDesc};
+use zenith_rendergraph::{Buffer, BufferDesc, ColorInfoBuilder, RenderGraphBuilder, RenderGraphResource, RenderResource, Texture, TextureDesc};
 
 pub struct TriangleRenderer {
-    vertex_buffer: SharedRenderGraphResource<Buffer>,
-    index_buffer: SharedRenderGraphResource<Buffer>,
+    vertex_buffer: RenderResource<Buffer>,
+    index_buffer: RenderResource<Buffer>,
     shader: Arc<GraphicShader>,
     start_time: std::time::Instant,
 }
@@ -23,13 +23,13 @@ impl TriangleRenderer {
         let indices = [0u16, 1, 2];
 
         let device = device.device();
-        let vertex_buffer = SharedRenderGraphResource::new(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = RenderResource::new(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("triangle vertex buffer"),
             contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         }));
 
-        let index_buffer = SharedRenderGraphResource::new(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let index_buffer = RenderResource::new(device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("triangle index buffer"),
             contents: bytemuck::cast_slice(&indices),
             usage: wgpu::BufferUsages::INDEX,

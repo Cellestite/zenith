@@ -7,6 +7,8 @@ edition = "2021"
 wgpu.workspace = true
 bytemuck.workspace  = true
 glam.workspace = true
+log.workspace = true
+gltf.workspace = true
 
 zenith-core = { path = "../zenith-core" }
 zenith-build = { path = "../zenith-build" }

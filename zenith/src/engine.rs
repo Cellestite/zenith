@@ -1,7 +1,7 @@
 ﻿use std::sync::Arc;
 use winit::window::Window;
 use zenith_render::{RenderDevice, PipelineCache};
-use zenith_rendergraph::{RenderGraphBuilder, SharedRenderGraphResource, TextureState};
+use zenith_rendergraph::{RenderGraphBuilder, RenderResource, TextureState};
 use crate::RenderableApp;
 
 pub struct Engine {
@@ -37,7 +37,7 @@ impl Engine {
 
         if app_output_tex.is_some() {
             let surface_tex = self.render_device.acquire_next_frame();
-            let swapchain_tex = SharedRenderGraphResource::new(surface_tex.texture.clone());
+            let swapchain_tex = RenderResource::new(surface_tex.texture.clone());
             let app_output_tex = app_output_tex.unwrap();
 
             {

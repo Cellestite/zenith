@@ -5,7 +5,7 @@ use glam::{Quat, Vec3};
 use winit::keyboard::KeyCode;
 use winit::window::Window;
 use zenith::{launch, App, RenderableApp, block_on, RenderGraphBuilder, RenderGraphResource, Texture, SimpleMeshRenderer, RenderDevice, TaskResult, submit};
-use zenith::asset_loader::{GltfLoader, ModelData};
+use zenith::{GltfLoader, ModelData};
 use zenith::camera::{Camera, CameraController};
 use zenith::input::InputActionMapper;
 use zenith::system_event::SystemEventCollector;
@@ -31,7 +31,7 @@ impl App for GltfRendererApp {
         }
 
         let gltf_path = args[1].clone();
-        let load_task = submit(|| {
+        let load_task = submit(move || {
             info!("Worker thread: {:?} reading gltf...", std::thread::current().name());
             GltfLoader::load_from_file(gltf_path)
         });

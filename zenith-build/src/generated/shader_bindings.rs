@@ -2,7 +2,7 @@
 //
 // ^ wgsl_bindgen version 0.20.1
 // Changes made to this file will not be saved.
-// SourceHash: 99b2025f987a00e1d77c77de12724a9ae54dfa24e246527809c3d98345b7b460
+// SourceHash: 3fe42aefc12f1158d757ae31b0d728620c15dda041f49c9a76768c29197ddfb1
 
 #![allow(unused, non_snake_case, non_camel_case_types, non_upper_case_globals)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -659,11 +659,15 @@ pub mod mesh {
     pub struct WgpuBindGroup0EntriesParams<'a> {
         pub view: wgpu::BufferBinding<'a>,
         pub model: wgpu::BufferBinding<'a>,
+        pub base_color_texture: &'a wgpu::TextureView,
+        pub base_color_sampler: &'a wgpu::Sampler,
     }
     #[derive(Clone, Debug)]
     pub struct WgpuBindGroup0Entries<'a> {
         pub view: wgpu::BindGroupEntry<'a>,
         pub model: wgpu::BindGroupEntry<'a>,
+        pub base_color_texture: wgpu::BindGroupEntry<'a>,
+        pub base_color_sampler: wgpu::BindGroupEntry<'a>,
     }
     impl<'a> WgpuBindGroup0Entries<'a> {
         pub fn new(params: WgpuBindGroup0EntriesParams<'a>) -> Self {
@@ -676,10 +680,23 @@ pub mod mesh {
                     binding: 1,
                     resource: wgpu::BindingResource::Buffer(params.model),
                 },
+                base_color_texture: wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(params.base_color_texture),
+                },
+                base_color_sampler: wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(params.base_color_sampler),
+                },
             }
         }
-        pub fn into_array(self) -> [wgpu::BindGroupEntry<'a>; 2] {
-            [self.view, self.model]
+        pub fn into_array(self) -> [wgpu::BindGroupEntry<'a>; 4] {
+            [
+                self.view,
+                self.model,
+                self.base_color_texture,
+                self.base_color_sampler,
+            ]
         }
         pub fn collect<B: FromIterator<wgpu::BindGroupEntry<'a>>>(self) -> B {
             self.into_array().into_iter().collect()
@@ -720,6 +737,24 @@ pub mod mesh {
                             )
                                 as _),
                         },
+                        count: None,
+                    },
+                    #[doc = " @binding(2): \"base_color_texture\""]
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    #[doc = " @binding(3): \"base_color_sampler\""]
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],

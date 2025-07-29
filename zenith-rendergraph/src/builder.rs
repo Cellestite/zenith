@@ -5,7 +5,7 @@ use log::warn;
 use crate::node::{NodePipelineState, RenderGraphNode};
 use crate::graph::{GraphicNodeExecutionContext, LambdaNodeExecutionContext, RenderGraph, ResourceStorage};
 use crate::node::{DepthStencilInfo};
-use crate::interface::{GraphResourceAccess, ResourceDescriptor, SharedRenderGraphResource, Texture};
+use crate::interface::{GraphResourceAccess, ResourceDescriptor, RenderResource, Texture};
 use crate::resource::{
     ExportResourceStorage, ExportedRenderGraphResource, GraphImportExportResource,
     GraphResource, GraphResourceDescriptor, GraphResourceView,
@@ -63,7 +63,7 @@ impl RenderGraphBuilder {
     pub fn import<R: GraphImportExportResource>(
         &mut self,
         name: &str,
-        import_resource: impl Into<SharedRenderGraphResource<R>>,
+        import_resource: impl Into<RenderResource<R>>,
         access: impl Into<GraphResourceAccess>,
     ) -> RenderGraphResource<R> {
         GraphImportExportResource::import(import_resource, name, self, access)

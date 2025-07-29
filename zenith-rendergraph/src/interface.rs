@@ -24,7 +24,7 @@ macro_rules! render_graph_resource_interface {
             }
 
             impl GraphImportExportResource for $res_ty {
-                fn import(shared_resource: impl Into<SharedRenderGraphResource<Self>>, name: &str, builder: &mut RenderGraphBuilder, access: impl Into<GraphResourceAccess>) -> RenderGraphResource<Self> {
+                fn import(shared_resource: impl Into<RenderResource<Self>>, name: &str, builder: &mut RenderGraphBuilder, access: impl Into<GraphResourceAccess>) -> RenderGraphResource<Self> {
                     let id = builder.initial_resources.len() as u32;
                     let uses = access.into().try_into().expect("Inconsistent import resource access!");
                     builder.initial_resources.push((name.to_owned(), shared_resource.into(), uses).into());
@@ -63,9 +63,9 @@ render_graph_resource_interface!(
 );
 
 #[derive(Deref, DerefMut, From, Clone, Debug)]
-pub struct SharedRenderGraphResource<T: GraphResource>(T);
+pub struct RenderResource<T: GraphResource>(T);
 
-impl<T: GraphResource> SharedRenderGraphResource<T> {
+impl<T: GraphResource> RenderResource<T> {
     pub fn new(resource: T) -> Self {
         Self(resource)
     }

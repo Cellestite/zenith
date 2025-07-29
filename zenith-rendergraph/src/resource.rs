@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use derive_more::From;
 use crate::builder::{RenderGraphBuilder, ResourceAccessStorage};
 use crate::interface::{Buffer, BufferState, GraphResourceAccess, ResourceDescriptor, Texture, TextureState};
-use crate::SharedRenderGraphResource;
+use crate::RenderResource;
 
 pub trait GraphResource: Clone {
     type Descriptor: GraphResourceDescriptor;
@@ -65,7 +65,7 @@ impl<R: GraphResource, V: GraphResourceView> RenderGraphResourceAccess<R, V> {
 }
 
 pub trait GraphImportExportResource: GraphResource {
-    fn import(shared_resource: impl Into<SharedRenderGraphResource<Self>>, name: &str, builder: &mut RenderGraphBuilder, access: impl Into<GraphResourceAccess>) -> RenderGraphResource<Self>;
+    fn import(shared_resource: impl Into<RenderResource<Self>>, name: &str, builder: &mut RenderGraphBuilder, access: impl Into<GraphResourceAccess>) -> RenderGraphResource<Self>;
     fn export(resource: RenderGraphResource<Self>, builder: &mut RenderGraphBuilder, access: impl Into<GraphResourceAccess>) -> ExportedRenderGraphResource<Self>;
 }
 
@@ -82,8 +82,8 @@ impl<R: GraphResource> Copy for ExportedRenderGraphResource<R> {}
 pub(crate) enum InitialResourceStorage {
     ManagedBuffer(String, <Buffer as GraphResource>::Descriptor),
     ManagedTexture(String, <Texture as GraphResource>::Descriptor),
-    ImportedBuffer(String, SharedRenderGraphResource<Buffer>, BufferState),
-    ImportedTexture(String, SharedRenderGraphResource<Texture>, TextureState),
+    ImportedBuffer(String, RenderResource<Buffer>, BufferState),
+    ImportedTexture(String, RenderResource<Texture>, TextureState),
 }
 
 impl InitialResourceStorage {

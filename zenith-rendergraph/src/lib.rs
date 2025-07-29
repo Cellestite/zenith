@@ -4,7 +4,7 @@ mod graph;
 mod resource;
 mod interface;
 
-pub use interface::{Buffer, Texture, BufferDesc, TextureDesc, BufferState, TextureState, SharedRenderGraphResource};
+pub use interface::{Buffer, Texture, BufferDesc, TextureDesc, BufferState, TextureState, RenderResource};
 pub use resource::{RenderGraphResource, RenderGraphResourceAccess};
 pub use builder::{RenderGraphBuilder, GraphicNodeBuilder, GraphicPipelineBuilder};
 pub use node::{RenderGraphNode, GraphicPipelineDescriptor, ColorInfo, ColorInfoBuilder, ColorInfoBuilderError, DepthStencilInfo, DepthStencilInfoBuilder, DepthStencilInfoBuilderError};

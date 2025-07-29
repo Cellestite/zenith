@@ -13,6 +13,12 @@ var<uniform> view: ViewUniforms;
 @group(0) @binding(1)
 var<uniform> model: ModelUniforms;
 
+@group(0) @binding(2)
+var base_color_texture: texture_2d<f32>;
+
+@group(0) @binding(3)
+var base_color_sampler: sampler;
+
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -43,6 +49,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let normal = normalize(input.world_normal);
     let light_intensity = max(dot(normal, vec3<f32>(0.0, 0.0, 1.0)), 0.3);
 
-    let final_color = model.base_color * light_intensity;
+    let texture_color = textureSample(base_color_texture, base_color_sampler, input.tex_coord);
+    let base_color = model.base_color * texture_color.rgb;
+    let final_color = base_color * light_intensity;
+    
     return vec4<f32>(final_color, 1.0);
 } 

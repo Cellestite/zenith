@@ -1,4 +1,4 @@
-use crate::interface::SharedRenderGraphResource;
+use crate::interface::RenderResource;
 use std::cell::{Cell};
 use bytemuck::NoUninit;
 use derive_more::From;
@@ -23,12 +23,12 @@ pub(crate) enum ResourceStorage {
     },
     ImportedBuffer {
         name: String,
-        resource: SharedRenderGraphResource<Buffer>,
+        resource: RenderResource<Buffer>,
         state_tracker: ResourceStateTracker<BufferState>
     },
     ImportedTexture {
         name: String,
-        resource: SharedRenderGraphResource<Texture>,
+        resource: RenderResource<Texture>,
         state_tracker: ResourceStateTracker<TextureState>
     },
 }
@@ -425,11 +425,21 @@ impl<'node> GraphicNodeExecutionContext<'node> {
                     })
                 })
                 .collect::<SmallVec<[Option<wgpu::RenderPassColorAttachment>; 8]>>(),
-            depth_view.as_ref().map(|view| {
+            depth_view.as_ref().zip(self.pipeline_desc.depth_stencil_attachment.as_ref()).map(|(view, (_, depth_info))| {
                 wgpu::RenderPassDepthStencilAttachment {
                     view: &view,
-                    depth_ops: None,
-                    stencil_ops: None
+                    depth_ops: if depth_info.depth_write {
+                        Some(wgpu::Operations {
+                            load: depth_info.depth_load_op,
+                            store: depth_info.depth_store_op,
+                        })
+                    } else {
+                        None
+                    },
+                    stencil_ops: Some(wgpu::Operations {
+                        load: depth_info.stencil_load_op,
+                        store: depth_info.stencil_store_op,
+                    })
                 }
             })
         );

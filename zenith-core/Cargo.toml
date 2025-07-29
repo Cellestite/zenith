@@ -12,8 +12,6 @@ log = { workspace = true }
 smallvec = { workspace = true }
 hashbrown = { workspace = true }
 foldhash = { workspace = true }
-gltf = { workspace = true }
 glam = { workspace = true }
-bytemuck = { workspace = true }
 derive_more.workspace = true
 winit.workspace = true

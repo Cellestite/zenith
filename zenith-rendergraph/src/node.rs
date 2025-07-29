@@ -30,6 +30,14 @@ pub struct DepthStencilInfo {
     pub stencil: wgpu::StencilState,
     #[builder(default)]
     pub bias: wgpu::DepthBiasState,
+    #[builder(default)]
+    pub depth_load_op: wgpu::LoadOp<f32>,
+    #[builder(default)]
+    pub depth_store_op: wgpu::StoreOp,
+    #[builder(default)]
+    pub stencil_load_op: wgpu::LoadOp<u32>,
+    #[builder(default)]
+    pub stencil_store_op: wgpu::StoreOp,
 }
 
 #[derive(Default)]
