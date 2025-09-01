@@ -14,8 +14,11 @@ bytemuck.workspace = true
 glam.workspace = true
 gltf.workspace = true
 log.workspace = true
-memmap2 = "0.9"
-image.workspace = true
+bincode.workspace = true
+smol.workspace = true
+serde.workspace = true
 
 zenith-core = { path = "../zenith-core" }
+zenith-asset = { path = "../zenith-asset" }
 zenith-build = { path = "../zenith-build" }
+zenith-task = { path = "../zenith-task" }

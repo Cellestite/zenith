@@ -6,7 +6,6 @@ use winit::event::{WindowEvent};
 use winit::event_loop::{EventLoop};
 use winit::platform::pump_events::EventLoopExtPumpEvents;
 use zenith_core::system_event::{SystemEventCollector, UserEvent};
-use zenith_task::block_on;
 use crate::app::{RenderableApp};
 use crate::Engine;
 
@@ -18,9 +17,11 @@ pub struct EngineLoop<A> {
 
 impl<A: RenderableApp> EngineLoop<A> {
     pub(super) fn new() -> Result<Self, anyhow::Error> {
+        zenith_task::initialize();
         zenith_core::log::initialize()?;
+        zenith_asset::initialize()?;
 
-        let mut app = block_on(A::new())?;
+        let mut app = smol::block_on(A::new())?;
 
         let mut event_loop = EventLoop::with_user_event().build()?;
 
@@ -38,7 +39,7 @@ impl<A: RenderableApp> EngineLoop<A> {
             .next()
             .ok_or(anyhow!("Failed to create main window!"))?);
 
-        let mut engine = block_on(Engine::new(main_window.clone()))?;
+        let mut engine = smol::block_on(Engine::new(main_window.clone()))?;
         app.prepare(&mut engine.render_device, main_window.clone())?;
 
         Ok(Self {

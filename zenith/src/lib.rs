@@ -7,20 +7,24 @@ mod app;
 pub use app::{App, RenderableApp};
 pub use engine::Engine;
 
-// zenith-core
-pub use zenith_core::*;
+pub use paste::paste;
 
-// zenith-task
-pub use zenith_task::*;
+macro_rules! module_facade {
+    ($name:ident) => {
+        $crate::paste!{
+            pub mod $name {
+                pub use [<zenith_ $name>]::*;
+            }
+        }
+    };
+}
 
-// zenith-render
-pub use zenith_render::*;
-
-// zenith-renderer
-pub use zenith_renderer::*;
-
-// zenith-rendergraph
-pub use zenith_rendergraph::*;
+module_facade!(core);
+module_facade!(asset);
+module_facade!(task);
+module_facade!(render);
+module_facade!(renderer);
+module_facade!(rendergraph);
 
 pub async fn launch<A: RenderableApp>() -> Result<EngineLoop<A>, anyhow::Error> {
     let main_loop = EngineLoop::new()?;

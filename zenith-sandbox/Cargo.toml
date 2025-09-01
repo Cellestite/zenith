@@ -10,5 +10,6 @@ winit.workspace = true
 log.workspace = true
 anyhow.workspace = true
 glam.workspace = true
+smol.workspace = true
 
 zenith = { path = "../zenith" }

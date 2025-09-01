@@ -11,6 +11,7 @@ log.workspace = true
 gltf.workspace = true
 
 zenith-core = { path = "../zenith-core" }
+zenith-asset = { path = "../zenith-asset" }
 zenith-build = { path = "../zenith-build" }
 zenith-render = { path = "../zenith-render" }
 zenith-rendergraph = { path = "../zenith-rendergraph" }

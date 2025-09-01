@@ -5,7 +5,6 @@ use crossbeam_queue::SegQueue;
 use parking_lot::{Mutex};
 use zenith_core::collections::hashmap::HashMap;
 use crate::executor::{QueuedTask, ThreadLocalState, UntypedCompletedFunc};
-use crate::async_task::WakerRegistry;
 use crate::task::{BoxedTask, TaskId};
 
 pub(crate) struct WorkerThread {
@@ -16,8 +15,6 @@ pub(crate) struct WorkerThread {
 
     task_storage: Arc<Mutex<HashMap<TaskId, BoxedTask>>>,
     task_complete_handles: Arc<Mutex<HashMap<TaskId, UntypedCompletedFunc>>>,
-
-    waker_registry: Arc<WakerRegistry>,
 }
 
 unsafe impl Send for WorkerThread {}
@@ -31,8 +28,6 @@ impl WorkerThread {
 
         task_storage: Arc<Mutex<HashMap<TaskId, BoxedTask>>>,
         task_complete_handles: Arc<Mutex<HashMap<TaskId, UntypedCompletedFunc>>>,
-
-        waker_registry: Arc<WakerRegistry>,
     ) -> Self {
         Self {
             shutdown,
@@ -42,8 +37,6 @@ impl WorkerThread {
 
             task_storage,
             task_complete_handles,
-
-            waker_registry,
         }
     }
 
@@ -104,8 +97,6 @@ impl WorkerThread {
                 completed_fn(result);
             }
 
-            // notify futures
-            self.waker_registry.wake(task_id);
             executed_task = true;
         }
 
@@ -124,8 +115,6 @@ impl WorkerThread {
                 completed_fn(result);
             }
 
-            // notify futures
-            self.waker_registry.wake(task_id);
             executed_task = true;
         }
 

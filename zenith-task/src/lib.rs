@@ -5,36 +5,39 @@
 
 mod task;
 mod executor;
-mod async_task;
 mod worker;
 
-use std::future::{IntoFuture};
-use std::sync::LazyLock;
-use crate::async_task::{AsyncTask, AsyncTaskHandle};
-use crate::executor::TaskExecutor;
+use std::sync::{OnceLock};
+use crate::executor::TaskSchedular;
 use crate::task::{AsTaskState, Task};
 pub use task::{TaskId, TaskResult, TaskHandle};
 
-static UNIVERSAL_EXECUTOR: LazyLock<TaskExecutor> = LazyLock::new(|| {
-    TaskExecutor::default()
-});
+static UNIVERSAL_SCHEDULAR: OnceLock<TaskSchedular> = OnceLock::new();
 
+#[inline]
+pub fn initialize() {
+    UNIVERSAL_SCHEDULAR.set(TaskSchedular::default()).expect("Failed to initialize zenith-task.");
+}
+
+#[inline]
 pub fn submit<T>(task: T) -> TaskResult<T::Output>
 where
     T: Task + 'static,
     T::Output: Send + 'static,
 {
-    UNIVERSAL_EXECUTOR.submit(task)
+    UNIVERSAL_SCHEDULAR.get().unwrap().submit(task)
 }
 
+#[inline]
 pub fn submit_to<T>(thread_name: &str, task: T) -> anyhow::Result<TaskResult<T::Output>>
 where
     T: Task + 'static,
     T::Output: Send + 'static,
 {
-    UNIVERSAL_EXECUTOR.submit_to(thread_name, task)
+    UNIVERSAL_SCHEDULAR.get().unwrap().submit_to(thread_name, task)
 }
 
+#[inline]
 pub fn submit_after<T, const N: usize>(
     task: T,
     dependencies: [&dyn AsTaskState; N]
@@ -43,9 +46,10 @@ where
     T: Task + 'static,
     T::Output: Send + 'static,
 {
-    UNIVERSAL_EXECUTOR.submit_after(task, dependencies)
+    UNIVERSAL_SCHEDULAR.get().unwrap().submit_after(task, dependencies)
 }
 
+#[inline]
 pub fn submit_to_after<T, const N: usize>(
     thread_name: &str,
     task: T,
@@ -55,65 +59,18 @@ where
     T: Task + 'static,
     T::Output: Send + 'static,
 {
-    UNIVERSAL_EXECUTOR.submit_to_after(thread_name, task, dependencies)
+    UNIVERSAL_SCHEDULAR.get().unwrap().submit_to_after(thread_name, task, dependencies)
 }
 
-pub fn block_on<F: IntoFuture>(future: F) -> F::Output {
-    // TODO: true async executor, this will block the thread in thread pool
-    pollster::block_on(future)
-}
-
-pub fn spawn<F>(future: F) -> AsyncTaskHandle<F::Output>
-where
-    F: AsyncTask + 'static,
-    F::Output: Send + 'static,
-{
-    UNIVERSAL_EXECUTOR.spawn(future)
-}
-
-pub fn spawn_to<F>(
-    thread_name: &str,
-    future: F,
-) -> anyhow::Result<AsyncTaskHandle<F::Output>>
-where
-    F: AsyncTask + 'static,
-    F::Output: Send + 'static,
-{
-    UNIVERSAL_EXECUTOR.spawn_to(thread_name, future)
-}
-
-pub fn spawn_after<F, const N: usize>(
-    future: F,
-    dependencies: [&dyn AsTaskState; N],
-) -> AsyncTaskHandle<F::Output>
-where
-    F: AsyncTask + 'static,
-    F::Output: Send + 'static
-{
-    UNIVERSAL_EXECUTOR.spawn_after(future, dependencies)
-}
-
-pub fn spawn_to_after<F, const N: usize>(
-    thread_name: &str,
-    future: F,
-    dependencies: [&dyn AsTaskState; N],
-) -> anyhow::Result<AsyncTaskHandle<F::Output>>
-where
-    F: AsyncTask + 'static,
-    F::Output: Send + 'static,
-{
-    UNIVERSAL_EXECUTOR.spawn_to_after(thread_name, future, dependencies)
-}
-
+#[inline]
 pub fn config(thread_configs: &[(&str, usize)]) {
-    UNIVERSAL_EXECUTOR.config(thread_configs);
+    UNIVERSAL_SCHEDULAR.get().unwrap().config(thread_configs);
 }
 
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
-    use async_std::task::sleep;
     use parking_lot::Mutex;
     use super::*;
 
@@ -128,10 +85,7 @@ mod tests {
 
         test_task_with_return_value();
         test_concurrent_tasks_with_return_values();
-        test_async_task_submission();
-        test_string_processing_tasks();
 
-        test_dependencies();
         test_ring_loop();
 
         println!("\nAll tests completed！");
@@ -306,114 +260,6 @@ mod tests {
 
         assert_eq!(results.len(), 5);
         assert_eq!(results, [0, 1, 4, 9, 16]);
-    }
-
-    fn test_async_task_submission() {
-        println!("\n=== test_async_task_submission() ===");
-
-        let future_handle = spawn(async {
-            let first_task = async {
-                println!("Start a async task");
-                println!("In different thread!: {:?}", std::thread::current().name());
-                sleep(Duration::from_millis(50)).await;
-                "Async result"
-            };
-
-            let async_task = spawn(async {
-                println!("In different thread!: {:?}", std::thread::current().name());
-                sleep(Duration::from_millis(10)).await;
-            });
-            let async_result = spawn_after(async {
-                println!("In different thread!: {:?}", std::thread::current().name());
-                sleep(Duration::from_millis(120)).await;
-                "Another async result"
-            }, [&async_task]);
-
-            let block = async {
-                println!("Hello~");
-                let mut final_message = first_task.await.to_owned();
-                final_message.push_str(async_result.await);
-                final_message
-            };
-
-            let result = block.await;
-            println!("Async result is: {}", result);
-
-            assert_eq!(result, "Async resultAnother async result");
-        });
-        future_handle.wait();
-    }
-
-    fn test_string_processing_tasks() {
-        println!("\n=== test_string_processing_tasks() ===");
-
-        let mut handles = Vec::new();
-
-        let words = vec!["Hello", "World", "from", "TaskExecutor", "System"];
-
-        for word in words {
-            let handle = submit(move || {
-                let processed = format!("{}({})", word, word.len());
-                println!("Processing: {} -> {}", word, processed);
-                processed
-            });
-            handles.push(handle);
-        }
-
-        let mut results = Vec::new();
-        for handle in handles {
-            results.push(handle.get_result());
-        }
-
-        println!("Result: {:?}", results);
-
-        assert_eq!(results.len(), 5);
-        assert_eq!(results, ["Hello(5)", "World(5)", "from(4)", "TaskExecutor(12)", "System(6)"]);
-    }
-
-    fn test_dependencies() {
-        println!("\n=== test_dependencies() ===");
-
-        let results = Arc::new(Mutex::new(Vec::new()));
-
-        let inner_results = results.clone();
-        let first = submit(move || {
-            inner_results.lock().push("first");
-            println!("executing thread: {:?}", std::thread::current().name())
-        }).into_handle();
-        let inner_results = results.clone();
-        let second = submit(move || {
-            inner_results.lock().push("second");
-            println!("executing thread: {:?}", std::thread::current().name())
-        });
-        let inner_results = results.clone();
-        let third = submit_after(move || {
-            inner_results.lock().push("third");
-            println!("executing thread: {:?}", std::thread::current().name())
-        }, [&first, &second]);
-        let inner_results = results.clone();
-        let fourth = submit_after(move || {
-            inner_results.lock().push("fourth");
-            println!("executing thread: {:?}", std::thread::current().name())
-        }, [&third]);
-        let inner_results = results.clone();
-        let fifth = submit_after(move || {
-            inner_results.lock().push("fifth");
-            println!("executing thread: {:?}", std::thread::current().name())
-        }, [&third]);
-        let inner_results = results.clone();
-        let sixth = submit_after(move || {
-            inner_results.lock().push("sixth");
-            println!("executing thread: {:?}", std::thread::current().name())
-        }, [&first]);
-
-        fifth.wait();
-        fourth.wait();
-        sixth.wait();
-
-        for result in Mutex::into_inner(Arc::into_inner(results).unwrap()) {
-            println!("result: {result}");
-        }
     }
 
     fn test_ring_loop() {

@@ -8,9 +8,11 @@ winit = { workspace = true }
 anyhow = { workspace = true }
 log = { workspace = true }
 wgpu = { workspace = true } 
-glam.workspace = true
+smol.workspace = true
+paste.workspace = true
 
 zenith-core = { path = "../zenith-core" }
+zenith-asset = { path = "../zenith-asset" }
 zenith-task = { path = "../zenith-task" }
 zenith-render = { path = "../zenith-render" }
 zenith-renderer = { path = "../zenith-renderer" }

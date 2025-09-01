@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::fmt::{Debug, Formatter};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::thread::{JoinHandle};
 use parking_lot::{Mutex, RwLock};
@@ -6,7 +7,6 @@ use crossbeam_queue::SegQueue;
 use anyhow::{Result, anyhow};
 use zenith_core::collections::{SmallVec};
 use zenith_core::collections::hashmap::HashMap;
-use crate::async_task::{AsyncTask, AsyncTaskHandle, WakerRegistry};
 use crate::task::{AsTaskState, BoxedTask, Task, TaskId, TaskResult, TaskState};
 use crate::worker::WorkerThread;
 
@@ -17,9 +17,9 @@ pub(crate) struct QueuedTask {
     dependencies: SmallVec<[Arc<TaskState>; 4]>,
 }
 
-impl std::fmt::Debug for QueuedTask {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.id, f)
+impl Debug for QueuedTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.id, f)
     }
 }
 
@@ -74,8 +74,15 @@ pub(crate) struct ThreadLocalState {
     pub(crate) task_complete_handles: Mutex<HashMap<TaskId, UntypedCompletedFunc>>,
 }
 
-pub struct TaskExecutor {
-    // TODO: replace to OnceLock
+impl Debug for ThreadLocalState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.local_queue, f)?;
+        Debug::fmt(&self.task_storage, f)?;
+        Debug::fmt(&self.task_complete_handles.lock().keys(), f)
+    }
+}
+
+pub struct TaskSchedular {
     thread_registry: Arc<RwLock<HashMap<String, ThreadInfo>>>,
 
     global_queue: Arc<SegQueue<QueuedTask>>,
@@ -83,27 +90,34 @@ pub struct TaskExecutor {
 
     task_storage: Arc<Mutex<HashMap<TaskId, BoxedTask>>>,
     task_complete_handles: Arc<Mutex<HashMap<TaskId, UntypedCompletedFunc>>>,
-
-    waker_registry: Arc<WakerRegistry>,
 }
 
-unsafe impl Send for TaskExecutor {}
-unsafe impl Sync for TaskExecutor {}
+unsafe impl Send for TaskSchedular {}
+unsafe impl Sync for TaskSchedular {}
 
-impl Default for TaskExecutor {
+impl Debug for TaskSchedular {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.thread_registry, f)?;
+        Debug::fmt(&self.global_queue, f)?;
+        Debug::fmt(&self.thread_local_states, f)?;
+        Debug::fmt(&self.task_storage, f)?;
+        Debug::fmt(&self.task_complete_handles.lock().keys(), f)
+    }
+}
+
+impl Default for TaskSchedular {
     fn default() -> Self {
         Self::new(&[("worker", 8)])
     }
 }
 
-impl TaskExecutor {
+impl TaskSchedular {
     pub fn new(thread_configs: &[(&str, usize)]) -> Self {
         let thread_registry = Arc::new(RwLock::new(HashMap::new()));
         let global_queue = Arc::new(SegQueue::new());
         let thread_local_states = Arc::new(RwLock::new(HashMap::new()));
         let task_storage = Arc::new(Mutex::new(HashMap::new()));
         let task_complete_handles = Arc::new(Mutex::new(HashMap::new()));
-        let waker_registry = Arc::new(WakerRegistry::new());
 
         let executor = Self {
             thread_registry,
@@ -113,8 +127,6 @@ impl TaskExecutor {
 
             task_storage,
             task_complete_handles,
-
-            waker_registry,
         };
         executor.spawn_threads(thread_configs);
         executor
@@ -155,7 +167,7 @@ impl TaskExecutor {
         let task_state = self.register_task(boxed_task, Some(thread_name));
         let handle: TaskResult<T::Output> = TaskResult::from_task(task_state, task_id);
 
-        // directly add to thread's local queue
+        // directly push into thread's local queue
         {
             let thread_local_states = self.thread_local_states.read();
             if let Some(local_state) = thread_local_states.get(thread_name) {
@@ -259,99 +271,6 @@ impl TaskExecutor {
         task_state
     }
 
-    pub fn spawn<F>(&self, future: F) -> AsyncTaskHandle<F::Output>
-    where
-        F: AsyncTask + 'static,
-        F::Output: Send + 'static
-    {
-        let async_task = move || {
-            // TODO: true async executor, this will block the thread in thread pool
-            pollster::block_on(future)
-        };
-
-        let task = self.submit(async_task);
-
-        let async_handle = AsyncTaskHandle::new(
-            task,
-            self.waker_registry.clone(),
-        );
-
-        async_handle
-    }
-
-    pub fn spawn_to<F>(
-        &self,
-        thread_name: &str,
-        future: F,
-    ) -> Result<AsyncTaskHandle<F::Output>>
-    where
-        F: AsyncTask + 'static,
-        F::Output: Send + 'static
-    {
-        let async_task = move || {
-            // TODO: true async executor, this will block the thread in thread pool
-            pollster::block_on(future)
-        };
-        
-        let handle = self.submit_to(thread_name, async_task)?;
-
-        let async_handle = AsyncTaskHandle::new(
-            handle,
-            self.waker_registry.clone(),
-        );
-        
-        Ok(async_handle)
-    }
-
-    pub fn spawn_after<F, const N: usize>(
-        &self,
-        future: F,
-        dependencies: [&dyn AsTaskState; N],
-    ) -> AsyncTaskHandle<F::Output>
-    where
-        F: AsyncTask + 'static,
-        F::Output: Send + 'static
-    {
-        let async_task = move || {
-            // TODO: true async executor, this will block the thread in thread pool
-            pollster::block_on(future)
-        };
-
-        let handle = self.submit_after(async_task, dependencies);
-
-        let async_handle = AsyncTaskHandle::new(
-            handle,
-            self.waker_registry.clone(),
-        );
-
-        async_handle
-    }
-
-    pub fn spawn_to_after<F, const N: usize>(
-        &self,
-        thread_name: &str,
-        future: F,
-        dependencies: [&dyn AsTaskState; N],
-    ) -> Result<AsyncTaskHandle<F::Output>>
-    where
-        F: AsyncTask + 'static,
-        F::Output: Send + 'static
-    {
-        let async_task = move || {
-            // TODO: true async executor, this will block the thread in thread pool
-            pollster::block_on(future)
-        };
-
-        let handle = self.submit_to_after(thread_name, async_task, dependencies)?;
-
-        let async_handle = AsyncTaskHandle::new(
-            handle,
-            self.waker_registry.clone(),
-        );
-
-        Ok(async_handle)
-    }
-
     // TODO:
     // pub fn wait_until_idle(&self) {
     //     while !self.global_queue.is_empty() {
@@ -376,7 +295,6 @@ impl TaskExecutor {
             thread.join();
         }
         self.thread_local_states.write().clear();
-        self.waker_registry.clear_all();
     }
 
     fn spawn_threads(&self, thread_configs: &[(&str, usize)]) {
@@ -401,8 +319,6 @@ impl TaskExecutor {
 
                     self.task_storage.clone(),
                     self.task_complete_handles.clone(),
-
-                    self.waker_registry.clone(),
                 );
 
                 let handle = std::thread::Builder::new()
@@ -417,7 +333,7 @@ impl TaskExecutor {
     }
 }
 
-impl Drop for TaskExecutor {
+impl Drop for TaskSchedular {
     fn drop(&mut self) {
         self.join_all_workers();
     }

@@ -1,6 +1,9 @@
 use std::sync::{Arc, Weak};
 use winit::window::Window;
-use zenith::{block_on, launch, App, RenderDevice, RenderGraphBuilder, RenderGraphResource, RenderableApp, Texture, TriangleRenderer};
+use zenith::{launch, App, RenderableApp};
+use zenith::render::RenderDevice;
+use zenith::renderer::TriangleRenderer;
+use zenith::rendergraph::{RenderGraphBuilder, RenderGraphResource, Texture};
 
 pub struct TriangleApp {
     window: Option<Weak<Window>>,
@@ -41,7 +44,7 @@ impl RenderableApp for TriangleApp {
 }
 
 fn main() {
-    let engine_loop = block_on(launch::<TriangleApp>())
+    let engine_loop = smol::block_on(launch::<TriangleApp>())
         .expect("Failed to create zenith engine loop!");
 
     engine_loop

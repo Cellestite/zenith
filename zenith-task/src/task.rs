@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::any::Any;
+use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use parking_lot::{Condvar, Mutex};
 
@@ -53,6 +54,12 @@ pub(crate) struct BoxedTask {
     execute_fn: UntypedExecuteFunc,
 }
 
+impl Debug for BoxedTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("BoxedTask#{:?}", self.id))
+    }
+}
+
 impl BoxedTask {
     pub(crate) fn new<T: Task + 'static>(task: T) -> Self {
         let id = TaskId::new();
@@ -82,8 +89,9 @@ pub trait AsTaskState {
     fn as_state(&self) -> &Arc<TaskState>;
 }
 
+#[derive(Debug)]
 pub struct TaskState {
-    result: Mutex<Option<UntypedThreadSafeObject>>,
+    pub(crate) result: Mutex<Option<UntypedThreadSafeObject>>,
     completed: AtomicBool,
     condvar: Condvar,
 }
@@ -129,7 +137,7 @@ pub struct TaskResult<T> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Clone + Send + 'static> Clone for TaskResult<T> {
+impl<T: Send + 'static> Clone for TaskResult<T> {
     fn clone(&self) -> Self {
         Self {
             state: self.state.clone(),
@@ -236,6 +244,7 @@ impl<T: Send + 'static> AsTaskState for TaskResult<T> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct TaskHandle {
     id: TaskId,
     state: Arc<TaskState>,

@@ -137,8 +137,8 @@ pub struct CameraController {
     // Higher the value, server the lagging. Zero means no smoothing
     smoothing_factor: f32,
 
-    accumulated_dx: f32,
-    accumulated_dy: f32,
+    accum_dx: f32,
+    accum_dy: f32,
     is_grabbed: bool,
 }
 
@@ -146,15 +146,15 @@ impl Default for CameraController {
     fn default() -> Self {
         Self {
             accum_local_pitch: Default::default(),
-            max_pitch_angle: Degree::from(89.).into(),
+            max_pitch_angle: Degree::from(89.99).into(),
             accum_local_yaw: Default::default(),
 
             move_speed: 70.,
             mouse_sensitivity: 1.,
             smoothing_factor: 0.85,
 
-            accumulated_dx: 0.0,
-            accumulated_dy: 0.0,
+            accum_dx: 0.0,
+            accum_dy: 0.0,
             is_grabbed: false,
         }
     }
@@ -195,8 +195,8 @@ impl CameraController {
             match event {
                 DeviceEvent::MouseMotion { delta } => {
                     if self.is_grabbed {
-                        self.accumulated_dx += delta.0 as f32;
-                        self.accumulated_dy += delta.1 as f32;
+                        self.accum_dx += delta.0 as f32;
+                        self.accum_dy += delta.1 as f32;
                     }
                 }
                 _ => {}
@@ -205,8 +205,8 @@ impl CameraController {
     }
 
     pub fn update_cameras<'a>(&mut self, delta_time: f32, mapper: &InputActionMapper, to_update_cameras: impl IntoIterator<Item = &'a mut Camera>) {
-        let d_local_yaw: Radians = Radians::from(-self.accumulated_dx * self.mouse_sensitivity * delta_time);
-        let d_local_pitch: Radians = Radians::from(-self.accumulated_dy * self.mouse_sensitivity * delta_time);
+        let d_local_yaw: Radians = Radians::from(-self.accum_dx * self.mouse_sensitivity * delta_time);
+        let d_local_pitch: Radians = Radians::from(-self.accum_dy * self.mouse_sensitivity * delta_time);
 
         let blend_factor = 1.0 - self.smoothing_factor.powf(delta_time * 60.0);
 
@@ -233,8 +233,8 @@ impl CameraController {
             camera.update_view();
         }
 
-        self.accumulated_dx = 0.0;
-        self.accumulated_dy = 0.0;
+        self.accum_dx = 0.0;
+        self.accum_dy = 0.0;
     }
 
     fn grab_cursor(&mut self, window: &Window) {

@@ -15,3 +15,7 @@ foldhash = { workspace = true }
 glam = { workspace = true }
 derive_more.workspace = true
 winit.workspace = true
+bytemuck.workspace = true
+wgpu.workspace = true
+derive_builder.workspace = true
+parking_lot.workspace = true
