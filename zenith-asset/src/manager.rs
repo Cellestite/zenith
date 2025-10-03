@@ -1,12 +1,9 @@
 ﻿use std::ffi::OsStr;
-use std::fs::File;
 use std::path::{Path, PathBuf};
-use anyhow::{anyhow};
-use memmap2::Mmap;
 use zenith_core::log::info;
 use zenith_task::{submit, submit_after, TaskHandle};
 use crate::gltf_loader::{GltfLoader, RawGltfProcessor};
-use crate::{RawResourceProcessor, AssetLoadRequest, AssetType, RawResourceLoadRequest, RawResourceLoader, ASSET_REGISTRY, RawResourceLoadRequestBuilder, AssetLoadRequestBuilder, Asset, AssetUrl};
+use crate::{RawResourceBaker, AssetLoadRequest, AssetType, RawResourceLoadRequest, RawResourceLoader, ASSET_REGISTRY, RawResourceLoadRequestBuilder, AssetLoadRequestBuilder, Asset, AssetUrl, deserialize_asset};
 use crate::render::{Material, Mesh, MeshCollection, Texture};
 
 fn workspace_root() -> PathBuf {
@@ -29,15 +26,20 @@ fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
 }
 
+/// Managing the loading, registering of assets and maintaining assets' cache.
+/// Asset lifetime:
+///     Load -> Register -> Unregister -> Unload
 pub struct AssetManager {
     cache_dir: PathBuf,
     content_dir: PathBuf,
 }
 
+/// Handle to represents an asset load task.
 #[derive(Debug, Clone)]
-pub struct AsyncLoadTask(Vec<TaskHandle>);
+pub struct AssetLoadTask(Vec<TaskHandle>);
 
-impl AsyncLoadTask {
+impl AssetLoadTask {
+    /// Blocking wait until the load task finished.
     pub fn wait(&self) {
         for handle in &self.0 {
             handle.wait();
@@ -54,18 +56,33 @@ impl AssetManager {
         }
     }
 
-    pub fn request_load(&self, path: impl AsRef<Path>) -> AsyncLoadTask {
-        if self.should_bake_asset(&path) {
-            info!("load raw asset {:?}", path.as_ref());
+    /// Send a load request to the asset manager.
+    /// Loading will start immediately asynchronously.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let asset_url = "mesh/cerberus/****.gltf";
+    /// let asset_load_task = manager.request_load(gltf_path);
+    /// ```
+    pub fn request_load(&self, url: impl Into<PathBuf>) -> AssetLoadTask {
+        let url = url.into();
+
+        if self.should_bake_asset(&url) {
+            info!("load raw asset {:?}", url);
+
             self.request_load_raw(RawResourceLoadRequestBuilder::default()
-                .path(path.as_ref().to_owned())
+                .relative_path(url)
                 .build().unwrap())
         } else {
-            info!("load asset {:?}", path.as_ref());
-            let mut path = path.as_ref().to_owned();
-            path.set_extension(MeshCollection::extension());
+            info!("load asset {:?}", url);
+
+            // TODO: this should be validate as AssetUrl
+            let mut url = url;
+            url.set_extension(MeshCollection::extension());
+
             self.request_load_asset(AssetLoadRequestBuilder::default()
-                .url(path)
+                .url(url)
                 .build().unwrap())
         }
     }
@@ -77,6 +94,7 @@ impl AssetManager {
         let asset_url = mesh_collection.asset_url();
         let cached_file_path = self.cache_dir.join(asset_url.path);
 
+        // if no cache had been found, rebake
         if !cached_file_path.exists() {
             return true;
         }
@@ -101,45 +119,41 @@ impl AssetManager {
             Err(_) => return false,
         };
 
+        // if the raw asset had been modified, rebake
         raw_last_modified_time > asset_last_modified_time
     }
 
-    pub fn request_load_raw(&self, load_request: RawResourceLoadRequest) -> AsyncLoadTask {
-        assert_eq!(load_request.path.extension(), Some(OsStr::new("gltf")));
+    fn request_load_raw(&self, load_request: RawResourceLoadRequest) -> AssetLoadTask {
+        // TODO: support other types of raw asset
+        assert_eq!(load_request.relative_path.extension(), Some(OsStr::new("gltf")));
 
-        let path = self.content_dir.join(&load_request.path);
-        info!("{:?}", path);
-        let result = GltfLoader::load_async(&path);
+        let raw_content_path = self.content_dir.join(&load_request.relative_path);
+        // TODO: support other types of raw asset
+        let raw_asset_load_task = GltfLoader::load_async(&raw_content_path);
         
-        let inner_result = result.clone();
-        let dir = self.cache_dir.clone();
-        let task = submit_after(move || {
-            inner_result.get_result().and_then(|raw| {
-                let asset_url = AssetUrl::from(load_request.path);
-                RawGltfProcessor::process(raw, ASSET_REGISTRY.get().unwrap(), &asset_url, &dir)
-            }).expect(&format!("Failed to process asset {:?}", path));
-        }, [&result]);
+        let inner_result = raw_asset_load_task.clone();
+        let cache_dir = self.cache_dir.clone();
 
-        AsyncLoadTask(vec![task.into_handle()])
+        let bake_asset_task = submit_after(move || {
+            inner_result.get_result().and_then(|raw| {
+                let asset_url = AssetUrl::from(load_request.relative_path);
+                RawGltfProcessor::bake(raw, ASSET_REGISTRY.get().unwrap(), &cache_dir, &asset_url)
+            }).expect(&format!("Failed to bake asset {:?}", raw_content_path));
+        }, [&raw_asset_load_task]);
+
+        AssetLoadTask(vec![bake_asset_task.into_handle()])
     }
 
-    pub fn request_load_asset(&self, load_request: AssetLoadRequest) -> AsyncLoadTask {
+    fn request_load_asset(&self, load_request: AssetLoadRequest) -> AssetLoadTask {
         let asset_type = load_request.url.ty();
 
-        let load_path = self.cache_dir.join(&load_request.url);
-        info!("Try load baked asset: {:?}", load_path);
+        let cache_asset_path = self.cache_dir.join(&load_request.url);
+        info!("Try to load baked asset: {:?}", cache_asset_path);
 
-        // TODO: support load dependencies
+        // TODO: load dependencies
+        // TODO: notice a 1-to-1 mapping between AsserType and static asset type, further abstract the deserialize logic
         if asset_type == AssetType::MeshCollection {
-            let file = File::open(&load_path)
-                .map_err(|e| anyhow!("Failed to open asset {:?}: {}", load_path, e))
-                .unwrap();
-            let mmap = unsafe { Mmap::map(&file) }
-                .map_err(|e| anyhow!("Failed to create memory mapping for file {:?}: {}", load_path, e))
-                .unwrap();
-
-            let (asset, _): (MeshCollection, usize) = bincode::serde::decode_from_slice(&mmap, bincode::config::standard())
-                .expect(&format!("Failed to deserialize asset {:?}", load_path));
+            let asset: MeshCollection = deserialize_asset(&cache_asset_path).unwrap();
 
             let mut mesh_collection_handles = Vec::with_capacity(asset.meshes.len() + asset.materials.len());
             for mesh_url in &asset.meshes {
@@ -154,37 +168,30 @@ impl AssetManager {
                     .build().unwrap()).0);
             }
 
-            return AsyncLoadTask(mesh_collection_handles);
+            return AssetLoadTask(mesh_collection_handles);
         }
 
         let task = submit(move || {
-            let file = File::open(&load_path)
-                .map_err(|e| anyhow!("Failed to open asset {:?}: {}", load_path, e))
-                .unwrap();
-            let mmap = unsafe { Mmap::map(&file) }
-                .map_err(|e| anyhow!("Failed to create memory mapping for GLTF file {:?}: {}", load_path, e))
-                .unwrap();
-
             match asset_type {
                 AssetType::Mesh => {
-                    let (asset, _): (Mesh, usize) = bincode::serde::decode_from_slice(&mmap, bincode::config::standard())
-                        .expect(&format!("Failed to deserialize asset {:?}", load_path));
+                    let asset: Mesh = deserialize_asset(&cache_asset_path).unwrap();
+
                     ASSET_REGISTRY
                         .get()
                         .unwrap()
                         .register(load_request.url, asset);
                 }
                 AssetType::Texture => {
-                    let (asset, _): (Texture, usize) = bincode::serde::decode_from_slice(&mmap, bincode::config::standard())
-                        .expect(&format!("Failed to deserialize asset {:?}", load_path));
+                    let asset: Texture = deserialize_asset(&cache_asset_path).unwrap();
+
                     ASSET_REGISTRY
                         .get()
                         .unwrap()
                         .register(load_request.url, asset);
                 }
                 AssetType::Material => {
-                    let (asset, _): (Material, usize) = bincode::serde::decode_from_slice(&mmap, bincode::config::standard())
-                        .expect(&format!("Failed to deserialize asset {:?}", load_path));
+                    let asset: Material = deserialize_asset(&cache_asset_path).unwrap();
+
                     ASSET_REGISTRY
                         .get()
                         .unwrap()
@@ -194,6 +201,6 @@ impl AssetManager {
             }
         });
 
-        AsyncLoadTask(vec![task.into_handle()])
+        AssetLoadTask(vec![task.into_handle()])
     }
 }

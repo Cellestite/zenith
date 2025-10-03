@@ -1,5 +1,3 @@
-//! Load -> (RawAsset) -> Process into engine format -> (Asset) -> store to disk
-
 use std::any::{Any, TypeId};
 use std::fs::File;
 use std::io::Write;
@@ -13,7 +11,9 @@ use derive_builder::Builder;
 use derive_more::From;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 use zenith_core::collections::hashmap::HashMap;
+use zenith_core::file::load_with_memory_mapping;
 use zenith_task::TaskResult;
 
 pub mod render;
@@ -26,22 +26,16 @@ pub fn initialize() -> Result<()> {
     ASSET_REGISTRY.set(AssetRegistry::new()).map_err(|_| anyhow!("Failed to initialize asset registry!"))
 }
 
-type AssetMap = HashMap<(AssetUrl, TypeId), Arc<dyn Asset>>;
+type AssetId = (AssetUrl, TypeId);
+type AssetMap = HashMap<AssetId, Arc<dyn Asset>>;
 
+#[derive(Default)]
 pub struct AssetRegistry {
     assets_map: RwLock<AssetMap>,
 }
 
 unsafe impl Send for AssetRegistry {}
 unsafe impl Sync for AssetRegistry {}
-
-impl Default for AssetRegistry {
-    fn default() -> Self {
-        Self {
-            assets_map: Default::default(),
-        }
-    }
-}
 
 impl AssetRegistry {
     pub fn new() -> Self {
@@ -50,30 +44,19 @@ impl AssetRegistry {
         }
     }
 
+    /// Register an asset.
     pub fn register<A: Asset>(&self, url: impl Into<AssetUrl>, asset: A) {
         let key = (url.into(), TypeId::of::<A>());
         self.assets_map.write().insert(key, Arc::new(asset));
     }
 
+    /// Unregister an asset, return true if this asset was exists.
     pub fn unregister<A: Asset>(&self, url: impl Into<AssetUrl>) -> bool {
         let key = (url.into(), TypeId::of::<A>());
         self.assets_map.write().remove(&key).is_some()
     }
 
-    // TODO: versioned asset
-    pub fn reload<A: Asset>(&self, url: impl Into<AssetUrl>, new_asset: A) -> bool {
-        let key = (url.into(), TypeId::of::<A>());
-
-        // Only replace if it already exists and has the same type
-        let mut assets = self.assets_map.write();
-        if assets.contains_key(&key) {
-            assets.insert(key, Arc::new(new_asset));
-            true
-        } else {
-            false
-        }
-    }
-
+    /// Get an asset by url. Return None is this asset had NOT been loaded.
     fn get<A: Asset>(&self, url: AssetUrl) -> Option<AssetRef<'_, A>> {
         let assets = self.assets_map.read();
         let key = (url, TypeId::of::<A>());
@@ -84,6 +67,7 @@ impl AssetRegistry {
     }
 }
 
+/// Engine asset type.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum AssetType {
     Mesh,
@@ -117,18 +101,36 @@ impl AssetType {
     }
 }
 
+/// Url to unique identify an asset.
+/// This is a relative path start with words, points to a file located inside content/ folder.
+/// TODO: Validation. AssetUrl should always have a valid extension.
+///
+/// # Example
+///
+/// ```
+/// use zenith_asset::AssetUrl;
+/// let asset_url = AssetUrl("mesh/cerberus/scene.mesh");
+/// ```
 #[derive(Clone, Debug, From, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetUrl {
     path: PathBuf,
 }
 
+impl From<String> for AssetUrl {
+    fn from(path: String) -> Self {
+        AssetUrl { path: path.into() }
+    }
+}
+
 impl AssetUrl {
+    /// Return an invalid url represents nothing.
     pub fn invalid() -> Self {
         Self {
             path: Default::default(),
         }
     }
 
+    /// Return the asset type this AssetUrl points to.
     pub fn ty(&self) -> AssetType {
         let extension = self
             .path
@@ -146,19 +148,22 @@ impl AsRef<Path> for AssetUrl {
     }
 }
 
+/// Asset handle represents a loaded and registered asset.
 pub struct AssetHandle<A> {
     url: AssetUrl,
     _marker: PhantomData<A>,
 }
 
 impl<A: Asset> AssetHandle<A> {
-    pub fn invalid() -> Self {
+    /// Return a null asset handle which points to nothing.
+    pub fn null() -> Self {
         Self {
             url: AssetUrl::invalid(),
             _marker: PhantomData,
         }
     }
-    
+
+    /// Create a new asset handle using AssetUrl.
     pub fn new(url: AssetUrl) -> Self {
         Self {
             url,
@@ -166,11 +171,13 @@ impl<A: Asset> AssetHandle<A> {
         }
     }
 
+    /// Get the underlying asset data if this asset is successfully loaded and registered.
     pub fn get(&self) -> Option<AssetRef<'_, A>> {
         ASSET_REGISTRY.get().unwrap().get(self.url.clone())
     }
 }
 
+/// Local asset reference which can only be used in a scope which restrict the borrowing lifetime.
 pub struct AssetRef<'a, T> {
     asset: Arc<dyn Asset>,
     _marker: PhantomData<&'a T>,
@@ -199,24 +206,31 @@ impl<'a, T: Asset> AsRef<T> for AssetRef<'a, T> {
     }
 }
 
+/// Asset is any type of data which can be serialized and deserialized.
+/// Asset should be read-only which is thread-safe.
+///
+/// Raw data is stored at content/ folder.
+/// The baked asset which had been turned into engine representation is stored at cache/ folder.
 pub trait Asset: Any + Send + Sync {
     fn as_any(&self) -> &dyn Any;
     fn url(&self, name: &str) -> AssetUrl;
     fn extension() -> &'static str where Self: Sized;
 }
 
+/// Data needed to send a raw resource load request.
 #[derive(Clone, Debug, Builder)]
 #[builder(setter(into))]
 pub struct RawResourceLoadRequest {
-    // relative path in the 'content' folder
-    path: PathBuf,
+    /// Relative path starts at content/ folder.
+    relative_path: PathBuf,
 }
 
+/// Type represents a raw resource.
 pub trait RawResource: Sized {
     fn load_path(&self) -> &Path;
 }
 
-/// Stateless loader
+/// Raw resource loader interface.
 pub trait RawResourceLoader {
     type Raw: RawResource;
 
@@ -224,21 +238,21 @@ pub trait RawResourceLoader {
     fn load_async(path: &Path) -> TaskResult<Result<Self::Raw>>;
 }
 
+/// Raw resource baker interface.
+pub trait RawResourceBaker {
+    type Raw: RawResource;
+
+    fn bake(raw: Self::Raw, registry: &AssetRegistry, directory: &PathBuf, url: &AssetUrl) -> Result<()>;
+}
+
+/// Data needed to send an asset load request.
 #[derive(Clone, Debug, Builder)]
 #[builder(setter(into))]
 pub struct AssetLoadRequest {
     url: AssetUrl,
 }
 
-/// Stateless processor
-pub trait RawResourceProcessor {
-    type Raw: RawResource;
-
-    fn process(raw: Self::Raw, registry: &AssetRegistry, url: &AssetUrl, directory: &PathBuf) -> Result<()>;
-}
-
-fn serialize_asset<A: Asset + Encode>(asset: &A, absolute_path: impl Into<PathBuf>) -> Result<()> {
-    let absolute_path = absolute_path.into();
+fn serialize_asset<A: Asset + Encode>(asset: &A, absolute_path: &PathBuf) -> Result<()> {
     if let Some(parent) = absolute_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -253,18 +267,11 @@ fn serialize_asset<A: Asset + Encode>(asset: &A, absolute_path: impl Into<PathBu
     Ok(())
 }
 
-// fn deserialize_asset<A: Asset + Encode>(asset: &A, absolute_path: impl Into<PathBuf>) -> Result<()> {
-//     let absolute_path = absolute_path.into();
-//     if let Some(parent) = absolute_path.parent() {
-//         std::fs::create_dir_all(parent)?;
-//     }
-//
-//     let config = bincode::config::standard();
-//     let encoded_data = bincode::encode_to_vec(asset, config)?;
-//
-//     let mut file = File::create(absolute_path)?;
-//     file.write_all(&encoded_data)?;
-//     file.flush()?;
-//
-//     Ok(())
-// }
+fn deserialize_asset<A: Asset + Encode + DeserializeOwned>(absolute_path: &PathBuf) -> Result<A> {
+    let mmap = load_with_memory_mapping(absolute_path)?;
+
+    let (asset, _): (A, usize) = bincode::serde::decode_from_slice(&mmap, bincode::config::standard())
+        .expect(&format!("Failed to deserialize asset {:?}", absolute_path));
+
+    Ok(asset)
+}

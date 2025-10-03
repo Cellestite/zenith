@@ -1,11 +1,10 @@
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
-use std::fs::File;
-use memmap2::{Mmap};
 use gltf::{buffer::Data as BufferData, image::Data as ImageData, Document, Primitive};
+use zenith_core::file::load_with_memory_mapping;
 use zenith_core::log::info;
 use crate::render::{Material, MaterialBuilder, Mesh, MeshBuilder, MeshCollection, TextureBuilder, TextureFormat, Vertex};
-use crate::{Asset, RawResourceProcessor, AssetRegistry, RawResource, RawResourceLoader, AssetUrl, serialize_asset};
+use crate::{Asset, RawResourceBaker, AssetRegistry, RawResource, RawResourceLoader, AssetUrl, serialize_asset};
 use zenith_task::{submit, TaskResult};
 
 #[derive(Debug, Clone)]
@@ -34,11 +33,7 @@ impl RawResourceLoader for GltfLoader {
     type Raw = RawGltf;
 
     fn load(path: &Path) -> Result<Self::Raw> {
-        let gltf_file = File::open(path)
-            .map_err(|e| anyhow!("Failed to open GLTF file {:?}: {}", path, e))?;
-
-        let mmap = unsafe { Mmap::map(&gltf_file) }
-            .map_err(|e| anyhow!("Failed to create memory mapping for GLTF file {:?}: {}", path, e))?;
+        let mmap = load_with_memory_mapping(path)?;
 
         let gltf = gltf::Gltf::from_slice(&mmap)
             .map_err(|e| anyhow!("Failed to parse GLTF: {}", e))?;
@@ -49,30 +44,17 @@ impl RawResourceLoader for GltfLoader {
             buffers: vec![],
             images: vec![],
         };
-        Self::load_gltf_with_mmap(path, &mut raw)?;
+        
+        Self::load_gltf(path, &mut raw)?;
+        
         Ok(raw)
     }
 
-    fn load_async(path: &Path) -> TaskResult<Result<Self::Raw>> {
-        let path = path.to_owned();
+    fn load_async(raw_content_path: &Path) -> TaskResult<Result<Self::Raw>> {
+        let path = raw_content_path.to_owned();
 
         submit(move || {
-            let gltf_file = File::open(&path)
-                .map_err(|e| anyhow!("Failed to open GLTF file {:?}: {}", path, e))?;
-
-            let mmap = unsafe { Mmap::map(&gltf_file) }
-                .map_err(|e| anyhow!("Failed to create memory mapping for GLTF file {:?}: {}", path, e))?;
-
-            let gltf = gltf::Gltf::from_slice(&mmap)
-                .map_err(|e| anyhow!("Failed to parse GLTF: {}", e))?;
-
-            let mut raw = RawGltf {
-                path: path.clone(),
-                gltf,
-                buffers: vec![],
-                images: vec![],
-            };
-            Self::load_gltf_with_mmap(&path, &mut raw).map(|_| raw)
+            Self::load(&path)
         })
     }
 }
@@ -87,20 +69,21 @@ impl RawGltfProcessor {
 
 impl RawGltfProcessor {
     fn process_node(
-        main_url: &str,
+        base_directory: &PathBuf,
         node: &gltf::Node,
         buffers: &[BufferData],
         registry: &AssetRegistry,
         meshes_url: &mut Vec<AssetUrl>,
-        directory: &PathBuf,
+        main_url: &str,
     ) -> Result<()> {
         if let Some(mesh) = node.mesh() {
             for primitive in mesh.primitives() {
-                let mesh_asset = Self::process_primitive(&primitive, buffers)?;
+                // TODO: abstract asset serialize and register logic
+                let mesh_asset = Self::bake_mesh(&primitive, buffers)?;
                 let url = mesh_asset.url(&main_url);
 
-                let asset_serialize_path = directory.join(&url);
-                serialize_asset(&mesh_asset, asset_serialize_path)?;
+                let asset_serialize_path = base_directory.join(&url);
+                serialize_asset(&mesh_asset, &asset_serialize_path)?;
 
                 meshes_url.push(url.clone());
                 registry.register(url, mesh_asset);
@@ -108,13 +91,13 @@ impl RawGltfProcessor {
         }
 
         for child in node.children() {
-            Self::process_node(main_url, &child, buffers, registry, meshes_url, directory)?;
+            Self::process_node(base_directory, &child, buffers, registry, meshes_url, main_url)?;
         }
 
         Ok(())
     }
 
-    fn process_primitive(
+    fn bake_mesh(
         primitive: &Primitive,
         buffers: &[BufferData],
     ) -> Result<Mesh> {
@@ -192,7 +175,7 @@ impl RawGltfProcessor {
         Ok(normals)
     }
 
-    fn process_materials(gltf: &Document, images: &[ImageData]) -> Result<Vec<Material>> {
+    fn bake_materials(gltf: &Document, images: &[ImageData]) -> Result<Vec<Material>> {
         let mut materials = Vec::new();
 
         for material in gltf.materials() {
@@ -325,10 +308,10 @@ impl RawGltfProcessor {
     }
 }
 
-impl RawResourceProcessor for RawGltfProcessor {
+impl RawResourceBaker for RawGltfProcessor {
     type Raw = RawGltf;
 
-    fn process(raw: Self::Raw, registry: &AssetRegistry, url: &AssetUrl, directory: &PathBuf) -> Result<()> {
+    fn bake(raw: Self::Raw, registry: &AssetRegistry, base_directory: &PathBuf, url: &AssetUrl) -> Result<()> {
         let RawGltf {
             gltf,
             buffers,
@@ -336,16 +319,16 @@ impl RawResourceProcessor for RawGltfProcessor {
             ..
         } = raw;
 
-        let root_url = url.path.to_str().ok_or(anyhow!("Invalid asset url"))?;
+        let asset_url = url.path.to_str().ok_or(anyhow!(format!("Invalid asset url: {:?}", url)))?;
 
-        let materials = Self::process_materials(&gltf, &images)?;
+        let materials = Self::bake_materials(&gltf, &images)?;
         let mut material_urls = Vec::with_capacity(materials.len());
-
         for material in materials {
-            let url = material.url(root_url);
+            // TODO: abstract asset serialize and register logic
+            let url = material.url(asset_url);
 
-            let asset_write_root = directory.join(&url);
-            serialize_asset(&material, asset_write_root)?;
+            let asset_serialize_path = base_directory.join(&url);
+            serialize_asset(&material, &asset_serialize_path)?;
 
             material_urls.push(url.clone());
             registry.register(url, material);
@@ -354,7 +337,7 @@ impl RawResourceProcessor for RawGltfProcessor {
         let mut meshes_urls = Vec::with_capacity(material_urls.len());
         for scene in gltf.scenes() {
             for node in scene.nodes() {
-                Self::process_node(root_url, &node, &buffers, registry, &mut meshes_urls, &directory)?;
+                Self::process_node(&base_directory, &node, &buffers, registry, &mut meshes_urls, asset_url)?;
             }
         }
 
@@ -365,11 +348,11 @@ impl RawResourceProcessor for RawGltfProcessor {
             mesh_collection.add_mesh(mesh, mat);
         }
 
-        let url = mesh_collection.url(root_url);
-        let asset_write_root = directory.join(&url);
-        serialize_asset(&mesh_collection, asset_write_root)?;
+        let mesh_collection_url = mesh_collection.url(asset_url);
+        let asset_serialize_path = base_directory.join(&mesh_collection_url);
+        serialize_asset(&mesh_collection, &asset_serialize_path)?;
 
-        info!("[{}] is loaded and serialized.", root_url);
+        info!("[{}] is loaded and serialized.", asset_url);
         info!("{:?}", mesh_collection);
 
         Ok(())
@@ -377,16 +360,14 @@ impl RawResourceProcessor for RawGltfProcessor {
 }
 
 impl GltfLoader {
-    fn load_gltf_with_mmap<P: AsRef<Path>>(path: P, raw: &mut RawGltf) -> Result<()> {
-        let base_dir = path.as_ref().parent().ok_or(anyhow!("Invalid path"))?;
+    fn load_gltf<P: AsRef<Path>>(path: P, raw: &mut RawGltf) -> Result<()> {
+        let base_dir = path.as_ref().parent().ok_or(anyhow!("Invalid gltf load path."))?;
 
         let buffer_count = raw.gltf.buffers().len();
         let image_count = raw.gltf.images().len();
 
         raw.buffers.clear();
         raw.buffers.reserve(buffer_count);
-        // raw.tasked_buffers.clear();
-        // raw.tasked_buffers.reserve(buffer_count);
 
         for buffer in raw.gltf.buffers() {
             match buffer.source() {
@@ -397,16 +378,13 @@ impl GltfLoader {
                         let mut blob = None;
                         let data = BufferData::from_source_and_blob(buffer.source(), None, &mut blob)
                             .map_err(|e| anyhow!("Failed to decode data URI: {}", e))?;
+                        
                         raw.buffers.push(data);
                     } else {
                         info!("inspecting gltf buffer uri: {:?}", uri);
 
                         let buffer_path = base_dir.join(uri);
-                        let buffer_file = File::open(&buffer_path)
-                            .expect(&format!("Failed to open {:?}", buffer_path));
-
-                        let mmap = unsafe { Mmap::map(&buffer_file) }
-                            .expect(&format!("Failed to mmap gltf buffer {:?}", buffer_path));
+                        let mmap = load_with_memory_mapping(&buffer_path)?;
 
                         raw.buffers.push(BufferData(mmap[..].to_vec()));
                     }
@@ -419,8 +397,6 @@ impl GltfLoader {
 
         raw.images.clear();
         raw.images.reserve(image_count);
-        // raw.tasked_images.clear();
-        // raw.tasked_images.reserve(image_count);
 
         for image in raw.gltf.images() {
             match image.source() {
@@ -429,18 +405,15 @@ impl GltfLoader {
                         info!("inspecting gltf image uri: {:?}", uri);
 
                         let data = ImageData::from_source(image.source(), None, &raw.buffers)
-                            .map_err(|e| anyhow!("Failed to decode image data URI: {}", e))?;
+                            .map_err(|e| anyhow!("Failed to decode image data uri: {}", e))?;
+                        
                         raw.images.push(data);
                     } else {
                         info!("inspecting gltf image uri: {:?}", uri);
 
                         let image_path = base_dir.join(uri);
                         let uri = uri.to_owned();
-                        let image_file = File::open(&image_path)
-                            .expect(&format!("Failed to open {:?}", image_path));
-
-                        let mmap = unsafe { Mmap::map(&image_file) }
-                            .expect(&format!("Failed to mmap gltf image {:?}", image_path));
+                        let mmap = load_with_memory_mapping(&image_path)?;
 
                         raw.images.push(Self::decode_image(&mmap, &uri).expect("Failed to decode gltf image"));
                     }
@@ -448,6 +421,7 @@ impl GltfLoader {
                 gltf::image::Source::View { .. } => {
                     let data = ImageData::from_source(image.source(), None, &raw.buffers)
                         .map_err(|e| anyhow!("Failed to decode embedded image: {}", e))?;
+                    
                     raw.images.push(data);
                 }
             }

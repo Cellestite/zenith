@@ -6,7 +6,7 @@ use winit::event::{DeviceEvent, WindowEvent};
 use winit::keyboard::KeyCode;
 use winit::window::Window;
 use zenith::{launch, App, RenderableApp};
-use zenith::asset::manager::{AssetManager, AsyncLoadTask};
+use zenith::asset::manager::{AssetManager, AssetLoadTask};
 use zenith::core::camera::{Camera, CameraController};
 use zenith::core::input::InputActionMapper;
 use zenith::render::RenderDevice;
@@ -14,7 +14,7 @@ use zenith::renderer::{MeshRenderData, SimpleMeshRenderer};
 use zenith::rendergraph::{RenderGraphBuilder, RenderGraphResource, Texture};
 
 pub struct GltfRendererApp {
-    asset_load_task: AsyncLoadTask,
+    asset_load_task: AssetLoadTask,
     
     main_window: Option<Weak<Window>>,
     mesh_renderer: Option<SimpleMeshRenderer>,

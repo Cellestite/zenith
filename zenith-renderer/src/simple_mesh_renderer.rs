@@ -40,8 +40,8 @@ pub struct MeshRenderData {
 impl MeshRenderData {
     pub fn invalid() -> Self {
         Self {
-            mesh: AssetHandle::invalid(),
-            material: AssetHandle::invalid(),
+            mesh: AssetHandle::null(),
+            material: AssetHandle::null(),
         }
     }
 
