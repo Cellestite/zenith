@@ -10,6 +10,7 @@ log = { workspace = true }
 wgpu = { workspace = true } 
 smol.workspace = true
 paste.workspace = true
+pollster.workspace = true
 
 zenith-core = { path = "../zenith-core" }
 zenith-asset = { path = "../zenith-asset" }

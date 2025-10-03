@@ -14,19 +14,22 @@ pub struct RenderDevice {
 }
 
 impl RenderDevice {
-    pub async fn new(window: Arc<Window>) -> Result<Self, anyhow::Error> {
+    pub fn new(window: Arc<Window>) -> Result<Self, anyhow::Error> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            backends: wgpu::Backends::METAL,
             flags: wgpu::InstanceFlags::VALIDATION,
             ..Default::default()
         });
 
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                ..Default::default()
-            })
-            .await?;
+        let adapter = pollster::block_on(async {
+            instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    ..Default::default()
+                })
+                .await
+                .unwrap()
+        });
         let adapter_info = adapter.get_info();
         info!("Selected adapter: {} ({:?})\n\tDriver {}: {}",
             adapter_info.name,
@@ -34,14 +37,17 @@ impl RenderDevice {
             adapter_info.driver,
             adapter_info.driver_info);
 
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("zenith rhi device"),
-                    ..Default::default()
-                },
-            )
-            .await?;
+        let (device, queue) = pollster::block_on(async {
+            adapter
+                .request_device(
+                    &wgpu::DeviceDescriptor {
+                        label: Some("zenith rhi device"),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .unwrap()
+        });
 
         let window_size = window.inner_size();
         let width = window_size.width.max(1);

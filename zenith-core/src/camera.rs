@@ -4,7 +4,6 @@ use winit::event::{DeviceEvent, ElementState, MouseButton, WindowEvent};
 use winit::window::{CursorGrabMode, Window};
 use crate::input::InputActionMapper;
 use crate::math::{Degree, Radians};
-use crate::system_event::SystemEventCollector;
 
 // Zenith world space coordinate system (right-hand side, z up)
 //
@@ -168,39 +167,37 @@ impl CameraController {
         }
     }
 
-    pub fn process_event(&mut self, event: &SystemEventCollector, window: &Window) {
-        for event in event.window_events() {
-            match event {
-                WindowEvent::MouseInput { button, state, .. } => {
-                    if *button == MouseButton::Left {
-                        match state {
-                            ElementState::Pressed => {
-                                self.grab_cursor(window);
-                            }
-                            ElementState::Released => {
-                                self.release_cursor(window);
-                            }
+    pub fn on_window_event(&mut self, event: &WindowEvent, window: &Window) {
+        match event {
+            WindowEvent::MouseInput { button, state, .. } => {
+                if *button == MouseButton::Left {
+                    match state {
+                        ElementState::Pressed => {
+                            self.grab_cursor(window);
+                        }
+                        ElementState::Released => {
+                            self.release_cursor(window);
                         }
                     }
                 }
-                WindowEvent::Focused(false) => {
-                    // release cursor when window loses focus
-                    self.release_cursor(window);
-                }
-                _ => {}
             }
+            WindowEvent::Focused(false) => {
+                // release cursor when window loses focus
+                self.release_cursor(window);
+            }
+            _ => {}
         }
+    }
 
-        for event in event.device_events() {
-            match event {
-                DeviceEvent::MouseMotion { delta } => {
-                    if self.is_grabbed {
-                        self.accum_dx += delta.0 as f32;
-                        self.accum_dy += delta.1 as f32;
-                    }
+    pub fn on_device_event(&mut self, event: &DeviceEvent) {
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                if self.is_grabbed {
+                    self.accum_dx += delta.0 as f32;
+                    self.accum_dy += delta.1 as f32;
                 }
-                _ => {}
             }
+            _ => {}
         }
     }
 

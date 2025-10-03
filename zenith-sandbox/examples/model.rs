@@ -2,13 +2,13 @@
 use std::sync::{Arc, Weak};
 use glam::{Quat, Vec3};
 use log::error;
+use winit::event::{DeviceEvent, WindowEvent};
 use winit::keyboard::KeyCode;
 use winit::window::Window;
 use zenith::{launch, App, RenderableApp};
 use zenith::asset::manager::{AssetManager, AsyncLoadTask};
 use zenith::core::camera::{Camera, CameraController};
 use zenith::core::input::InputActionMapper;
-use zenith::core::system_event::SystemEventCollector;
 use zenith::render::RenderDevice;
 use zenith::renderer::{MeshRenderData, SimpleMeshRenderer};
 use zenith::rendergraph::{RenderGraphBuilder, RenderGraphResource, Texture};
@@ -26,7 +26,7 @@ pub struct GltfRendererApp {
 }
 
 impl App for GltfRendererApp {
-    async fn new() -> Result<Self, anyhow::Error> {
+    fn new() -> Result<Self, anyhow::Error> {
         let args: Vec<String> = env::args().collect();
         if args.len() != 2 {
             error!("Example: {} mesh/cerberus/scene.gltf", args[0]);
@@ -55,11 +55,13 @@ impl App for GltfRendererApp {
         })
     }
 
-    fn process_event(&mut self, collector: &SystemEventCollector) {
-        self.mapper.process_event(collector);
-        if let Some(window) = self.main_window.as_ref().and_then(|window| window.upgrade()) {
-            self.controller.process_event(collector, &window);
-        }
+    fn on_window_event(&mut self, event: &WindowEvent, window: &Window) {
+        self.mapper.on_window_event(event);
+        self.controller.on_window_event(event, &window);
+    }
+
+    fn on_device_event(&mut self, event: &DeviceEvent) {
+        self.controller.on_device_event(event);
     }
 
     fn tick(&mut self, delta_time: f32) {
@@ -104,9 +106,5 @@ impl RenderableApp for GltfRendererApp {
 }
 
 fn main() {
-    let engine_loop = smol::block_on(launch::<GltfRendererApp>()).unwrap();
-
-    engine_loop
-        .run()
-        .expect("Failed to start zenith engine loop!");
+    launch::<GltfRendererApp>().expect("Failed to launch zenith engine loop!");
 }

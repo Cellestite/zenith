@@ -11,12 +11,14 @@ use std::sync::{OnceLock};
 use crate::executor::TaskSchedular;
 use crate::task::{AsTaskState, Task};
 pub use task::{TaskId, TaskResult, TaskHandle};
+use zenith_core::log::info;
 
 static UNIVERSAL_SCHEDULAR: OnceLock<TaskSchedular> = OnceLock::new();
 
 #[inline]
 pub fn initialize() {
     UNIVERSAL_SCHEDULAR.set(TaskSchedular::default()).expect("Failed to initialize zenith-task.");
+    info!("Initialized with {} worker thread(s)", UNIVERSAL_SCHEDULAR.get().unwrap().num_worker_threads());
 }
 
 #[inline]

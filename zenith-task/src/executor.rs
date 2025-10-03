@@ -331,6 +331,11 @@ impl TaskSchedular {
             }
         }
     }
+    
+    #[inline]
+    pub fn num_worker_threads(&self) -> usize {
+        self.thread_registry.read().len()
+    }
 }
 
 impl Drop for TaskSchedular {

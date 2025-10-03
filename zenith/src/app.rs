@@ -1,13 +1,13 @@
-﻿use std::future::Future;
-use std::sync::Arc;
+﻿use std::sync::Arc;
+use winit::event::{DeviceEvent, WindowEvent};
 use winit::window::Window;
-use zenith_core::system_event::SystemEventCollector;
 use zenith_render::RenderDevice;
 use zenith_rendergraph::{RenderGraphBuilder, RenderGraphResource, Texture};
 
 pub trait App: Sized + 'static {
-    fn new() -> impl Future<Output = Result<Self, anyhow::Error>>;
-    fn process_event(&mut self, _collector: &SystemEventCollector) {}
+    fn new() -> Result<Self, anyhow::Error>;
+    fn on_window_event(&mut self, _event: &WindowEvent, _window: &Window) {}
+    fn on_device_event(&mut self, _event: &DeviceEvent) {}
     fn tick(&mut self, _delta_time: f32) {}
 }
 

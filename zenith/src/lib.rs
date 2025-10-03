@@ -26,7 +26,15 @@ module_facade!(render);
 module_facade!(renderer);
 module_facade!(rendergraph);
 
-pub async fn launch<A: RenderableApp>() -> Result<EngineLoop<A>, anyhow::Error> {
-    let main_loop = EngineLoop::new()?;
-    Ok(main_loop)
+pub fn launch<A: RenderableApp>() -> Result<(), anyhow::Error> {
+    zenith_task::initialize();
+    zenith_core::log::initialize()?;
+    zenith_asset::initialize()?;
+
+    let app = A::new()?;
+
+    let main_loop = EngineLoop::new(app)?;
+    main_loop.run()?;
+
+    Ok(())
 }

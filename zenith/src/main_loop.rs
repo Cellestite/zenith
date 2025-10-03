@@ -1,120 +1,135 @@
 ﻿use std::sync::Arc;
-use std::time::Duration;
-use anyhow::anyhow;
 use log::info;
-use winit::event::{WindowEvent};
-use winit::event_loop::{EventLoop};
-use winit::platform::pump_events::EventLoopExtPumpEvents;
-use zenith_core::system_event::{SystemEventCollector, UserEvent};
+use winit::application::ApplicationHandler;
+use winit::event::{DeviceEvent, DeviceId, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::window::{Window, WindowId};
 use crate::app::{RenderableApp};
 use crate::Engine;
 
 pub struct EngineLoop<A> {
-    event_loop: EventLoop<UserEvent>,
-    engine: Engine,
+    engine: Option<Engine>,
     app: A,
+
+    frame_count: u64,
+    last_tick: std::time::Instant,
+    last_time_printed: std::time::Instant,
+    should_exit: bool,
+}
+
+impl<A: RenderableApp> ApplicationHandler for EngineLoop<A> {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // TODO: only renderable app should create window
+        let main_window = Arc::new(
+            event_loop
+                .create_window(Window::default_attributes())
+                .unwrap(),
+        );
+
+        let mut engine = Engine::new(main_window.clone()).unwrap();
+
+        self.app.prepare(&mut engine.render_device, main_window.clone()).unwrap();
+        self.engine = Some(engine);
+
+        main_window.request_redraw();
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+        let engine = self.engine.as_mut().unwrap();
+        if engine.should_exit() {
+            event_loop.exit();
+        }
+
+        self.process_window_event(&event);
+    }
+
+    fn device_event(&mut self, event_loop: &ActiveEventLoop, _device_id: DeviceId, event: DeviceEvent) {
+        let engine = self.engine.as_mut().unwrap();
+        if engine.should_exit() {
+            event_loop.exit();
+        }
+        
+        self.app.on_device_event(&event);
+    }
 }
 
 impl<A: RenderableApp> EngineLoop<A> {
-    pub(super) fn new() -> Result<Self, anyhow::Error> {
-        zenith_task::initialize();
-        zenith_core::log::initialize()?;
-        zenith_asset::initialize()?;
-
-        let mut app = smol::block_on(A::new())?;
-
-        let mut event_loop = EventLoop::with_user_event().build()?;
-
-        let proxy = event_loop.create_proxy();
-        proxy.send_event(UserEvent::CreateWindow)
-            .expect("Failed to send main window creation request!");
-
-        let mut collector = SystemEventCollector::new();
-        event_loop.pump_app_events(Some(Duration::ZERO), &mut collector);
-        let SystemEventCollector { windows, .. } = collector;
-
-        let main_window = Arc::new(windows
-            .into_iter()
-            .take(1)
-            .next()
-            .ok_or(anyhow!("Failed to create main window!"))?);
-
-        let mut engine = smol::block_on(Engine::new(main_window.clone()))?;
-        app.prepare(&mut engine.render_device, main_window.clone())?;
-
+    pub(super) fn new(app: A) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            event_loop,
-            engine,
+            engine: None,
             app,
+
+            frame_count: 0u64,
+            last_tick: std::time::Instant::now(),
+            last_time_printed: std::time::Instant::now(),
+            should_exit: false,
         })
     }
 
-    pub fn run(self) -> Result<(), anyhow::Error> {
-        let mut event_loop = self.event_loop;
-        let mut engine = self.engine;
-        let mut app = self.app;
-
-        let mut should_exit = false;
-        let mut frame_count = 0u64;
-        let mut last_tick = std::time::Instant::now();
-        let mut last_time_printed = last_tick;
-
-        while !should_exit {
-            let delta_time = {
-                let now = std::time::Instant::now();
-                let delta_time = now - last_tick;
-                last_tick = now;
-
-                let last_time_print_elapsed = (now - last_time_printed).as_secs_f32();
-                if last_time_print_elapsed > 1. {
-                    info!("Frame rate: {} fps", frame_count as f32 / last_time_print_elapsed);
-                    last_time_printed = now;
-                    frame_count = 0;
-                }
-
-                delta_time.as_secs_f32()
-            };
-
-            let mut collector = SystemEventCollector::new();
-            event_loop.pump_app_events(Some(Duration::ZERO), &mut collector);
-
-            should_exit = Self::process_event(&mut engine, &mut app, &collector);
-            app.process_event(&collector);
-
-            engine.tick(delta_time);
-            app.tick(delta_time);
-
-            engine.render(&mut app);
-
-            frame_count += 1;
-        }
-
+    pub fn run(mut self) -> Result<(), anyhow::Error> {
+        let event_loop = EventLoop::new()?;
+        event_loop.set_control_flow(ControlFlow::Poll);
+        event_loop.run_app(&mut self)?;
         Ok(())
     }
+    
+    fn process_window_event(&mut self, event: &WindowEvent) {
+        // TODO: multi-window support
+        self.app.on_window_event(event, self.engine.as_ref().unwrap().main_window.as_ref());
+        
+        match event {
+            WindowEvent::Resized(_) => {
+                let engine = self.engine.as_mut().unwrap();
+                let app = &mut self.app;
 
-    fn process_event(engine: &mut Engine, app: &mut A, collector: &SystemEventCollector) -> bool {
-        let mut should_exit = false;
-        let mut had_resized = false;
-
-        for event in collector.window_events() {
-            match event {
-                WindowEvent::Resized(_) => {
-                    if had_resized {
-                        continue;
-                    }
-
-                    let inner_size = engine.main_window.inner_size();
-                    engine.resize(inner_size.width, inner_size.height);
-                    app.resize(inner_size.width, inner_size.height);
-                    had_resized = true;
-                }
-                WindowEvent::CloseRequested => {
-                    should_exit = true;
-                }
-                _ => {}
+                let inner_size = engine.main_window.inner_size();
+                engine.resize(inner_size.width, inner_size.height);
+                app.resize(inner_size.width, inner_size.height);
             }
+            WindowEvent::CloseRequested => {
+                let engine = self.engine.as_mut().unwrap();
+
+                engine.should_exit = true;
+            }
+            WindowEvent::RedrawRequested => {
+                self.tick();
+
+                let engine = self.engine.as_mut().unwrap();
+                let app = &mut self.app;
+
+                engine.render(app);
+                engine.main_window.request_redraw();
+            }
+            _ => {}
+        }
+    }
+
+    fn tick(&mut self) {
+        if self.should_exit {
+            return;
         }
 
-        should_exit
+        let delta_time = {
+            let now = std::time::Instant::now();
+            let delta_time = now - self.last_tick;
+            self.last_tick = now;
+
+            let last_time_print_elapsed = (now - self.last_time_printed).as_secs_f32();
+            if last_time_print_elapsed > 1. {
+                info!("Frame rate: {} fps", self.frame_count as f32 / last_time_print_elapsed);
+                self.last_time_printed = now;
+                self.frame_count = 0;
+            }
+
+            delta_time.as_secs_f32()
+        };
+
+        let engine = self.engine.as_mut().unwrap();
+        let app = &mut self.app;
+        
+        engine.tick(delta_time);
+        app.tick(delta_time);
+
+        self.frame_count += 1;
     }
 }

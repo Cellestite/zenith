@@ -9,11 +9,13 @@ pub struct Engine {
     pub render_device: RenderDevice,
     
     pipeline_cache: PipelineCache,
+
+    pub(crate) should_exit: bool,
 }
 
 impl Engine {
-    pub async fn new(main_window: Arc<Window>) -> Result<Self, anyhow::Error> {
-        let render_device = RenderDevice::new(main_window.clone()).await?;
+    pub fn new(main_window: Arc<Window>) -> Result<Self, anyhow::Error> {
+        let render_device = RenderDevice::new(main_window.clone())?;
         let pipeline_cache = PipelineCache::new();
 
         Ok(Self {
@@ -21,6 +23,8 @@ impl Engine {
             render_device,
 
             pipeline_cache,
+
+            should_exit: false,
         })
     }
 
@@ -83,11 +87,13 @@ impl Engine {
 
             self.main_window.pre_present_notify();
             graph.present(surface_tex).unwrap();
-            self.main_window.request_redraw();
         }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.render_device.resize(width, height);
     }
+
+    #[inline]
+    pub fn should_exit(&self) -> bool { self.should_exit }
 }

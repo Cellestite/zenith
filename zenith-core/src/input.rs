@@ -4,7 +4,6 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 use crate::collections::hashmap::HashMap;
 use crate::collections::hashset::HashSet;
 use crate::collections::SmallVec;
-use crate::system_event::SystemEventCollector;
 
 /// Represents the state of a key
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,53 +59,51 @@ impl InputManager {
         }
     }
 
-    pub fn process_event(&mut self, events: &SystemEventCollector) {
-        for event in events.window_events() {
-            match event {
-                WindowEvent::KeyboardInput { event, .. } => {
-                    if let PhysicalKey::Code(keycode) = event.physical_key {
-                        match event.state {
-                            ElementState::Pressed => {
-                                if !event.repeat {
-                                    // only register as pressed if it's not a repeat event
-                                    self.keys_pressed.insert(keycode);
-                                    self.keys_with_repeat.remove(&keycode);
-                                } else {
-                                    // mark this key as having repeat events
-                                    self.keys_with_repeat.insert(keycode);
-                                }
-                            }
-                            ElementState::Released => {
-                                self.keys_pressed.remove(&keycode);
-                                self.keys_with_repeat.remove(&keycode);
-                            }
-                        }
-                    }
-                }
-                WindowEvent::MouseInput { button, state, .. } => {
-                    match state {
+    pub fn on_window_event(&mut self, event: &WindowEvent) {
+        match event {
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let PhysicalKey::Code(keycode) = event.physical_key {
+                    match event.state {
                         ElementState::Pressed => {
-                            self.mouse_pressed.insert(*button);
+                            if !event.repeat {
+                                // only register as pressed if it's not a repeat event
+                                self.keys_pressed.insert(keycode);
+                                self.keys_with_repeat.remove(&keycode);
+                            } else {
+                                // mark this key as having repeat events
+                                self.keys_with_repeat.insert(keycode);
+                            }
                         }
                         ElementState::Released => {
-                            self.mouse_pressed.remove(button);
+                            self.keys_pressed.remove(&keycode);
+                            self.keys_with_repeat.remove(&keycode);
                         }
                     }
                 }
-                WindowEvent::ModifiersChanged(modifiers) => {
-                    self.modifiers = ModifiersState {
-                        shift: modifiers.state().shift_key(),
-                        ctrl: modifiers.state().control_key(),
-                        alt: modifiers.state().alt_key(),
-                        super_key: modifiers.state().super_key(),
-                    };
-                }
-                WindowEvent::Focused(false) => {
-                    // clear all input when window loses focus
-                    self.clear_all_input();
-                }
-                _ => {}
             }
+            WindowEvent::MouseInput { button, state, .. } => {
+                match state {
+                    ElementState::Pressed => {
+                        self.mouse_pressed.insert(*button);
+                    }
+                    ElementState::Released => {
+                        self.mouse_pressed.remove(button);
+                    }
+                }
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = ModifiersState {
+                    shift: modifiers.state().shift_key(),
+                    ctrl: modifiers.state().control_key(),
+                    alt: modifiers.state().alt_key(),
+                    super_key: modifiers.state().super_key(),
+                };
+            }
+            WindowEvent::Focused(false) => {
+                // clear all input when window loses focus
+                self.clear_all_input();
+            }
+            _ => {}
         }
     }
 
@@ -243,8 +240,8 @@ impl InputActionMapper {
         );
     }
 
-    pub fn process_event(&mut self, events: &SystemEventCollector) {
-        self.input.process_event(events);
+    pub fn on_window_event(&mut self, event: &WindowEvent) {
+        self.input.on_window_event(event);
     }
 
     pub fn tick(&mut self, delta_time: f32) {

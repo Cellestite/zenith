@@ -10,13 +10,7 @@ anyhow.workspace = true
 naga_oil.workspace = true
 include_absolute_path.workspace = true
 seq-macro.workspace = true
-bytemuck.workspace = true
-glam.workspace = true
-gltf.workspace = true
-log.workspace = true
-bincode.workspace = true
-smol.workspace = true
-serde.workspace = true
+pollster.workspace = true
 
 zenith-core = { path = "../zenith-core" }
 zenith-asset = { path = "../zenith-asset" }
