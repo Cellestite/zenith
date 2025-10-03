@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 use std::fs::File;
@@ -8,21 +7,6 @@ use zenith_core::log::info;
 use crate::render::{Material, MaterialBuilder, Mesh, MeshBuilder, MeshCollection, TextureBuilder, TextureFormat, Vertex};
 use crate::{Asset, RawResourceProcessor, AssetRegistry, RawResource, RawResourceLoader, AssetUrl, serialize_asset};
 use zenith_task::{submit, TaskResult};
-
-// pub fn to_wgpu_format(format: gltf::image::Format) -> wgpu::TextureFormat {
-//     match format {
-//         gltf::image::Format::R8 => wgpu::TextureFormat::R8Unorm,
-//         gltf::image::Format::R8G8 => wgpu::TextureFormat::Rg8Unorm,
-//         gltf::image::Format::R8G8B8 => wgpu::TextureFormat::Rgba8Unorm, // Convert to RGBA
-//         gltf::image::Format::R8G8B8A8 => wgpu::TextureFormat::Rgba8Unorm,
-//         gltf::image::Format::R16 => wgpu::TextureFormat::R16Unorm,
-//         gltf::image::Format::R16G16 => wgpu::TextureFormat::Rg16Unorm,
-//         gltf::image::Format::R16G16B16 => wgpu::TextureFormat::Rgba16Unorm, // Convert to RGBA
-//         gltf::image::Format::R16G16B16A16 => wgpu::TextureFormat::Rgba16Unorm,
-//         gltf::image::Format::R32G32B32FLOAT => wgpu::TextureFormat::Rgba32Float, // Convert to RGBA
-//         gltf::image::Format::R32G32B32A32FLOAT => wgpu::TextureFormat::Rgba32Float,
-//     }
-// }
 
 #[derive(Debug, Clone)]
 pub struct GltfLoader;
@@ -34,7 +18,6 @@ impl GltfLoader {
 }
 
 pub struct RawGltf {
-    name: String,
     path: PathBuf,
     gltf: gltf::Gltf,
     buffers: Vec<BufferData>,
@@ -60,14 +43,7 @@ impl RawResourceLoader for GltfLoader {
         let gltf = gltf::Gltf::from_slice(&mmap)
             .map_err(|e| anyhow!("Failed to parse GLTF: {}", e))?;
 
-        let stem = path
-            .file_stem()
-            .unwrap_or(OsStr::new("<unknown name>"))
-            .to_str()
-            .unwrap_or("<unknown name>");
-
         let mut raw = RawGltf {
-            name: stem.to_owned(),
             path: path.to_owned(),
             gltf,
             buffers: vec![],
@@ -90,14 +66,7 @@ impl RawResourceLoader for GltfLoader {
             let gltf = gltf::Gltf::from_slice(&mmap)
                 .map_err(|e| anyhow!("Failed to parse GLTF: {}", e))?;
 
-            let stem = path
-                .file_stem()
-                .unwrap_or(OsStr::new("<unknown name>"))
-                .to_str()
-                .unwrap_or("<unknown name>");
-
             let mut raw = RawGltf {
-                name: stem.to_owned(),
                 path: path.clone(),
                 gltf,
                 buffers: vec![],
@@ -118,19 +87,20 @@ impl RawGltfProcessor {
 
 impl RawGltfProcessor {
     fn process_node(
-        name: &str,
+        main_url: &str,
         node: &gltf::Node,
         buffers: &[BufferData],
         registry: &AssetRegistry,
         meshes_url: &mut Vec<AssetUrl>,
-        asset_serialize_root: &PathBuf,
+        directory: &PathBuf,
     ) -> Result<()> {
         if let Some(mesh) = node.mesh() {
             for primitive in mesh.primitives() {
                 let mesh_asset = Self::process_primitive(&primitive, buffers)?;
-                let url = mesh_asset.url(name);
+                let url = mesh_asset.url(&main_url);
 
-                serialize_asset(&mesh_asset, asset_serialize_root.join(&url.path))?;
+                let asset_serialize_path = directory.join(&url);
+                serialize_asset(&mesh_asset, asset_serialize_path)?;
 
                 meshes_url.push(url.clone());
                 registry.register(url, mesh_asset);
@@ -138,7 +108,7 @@ impl RawGltfProcessor {
         }
 
         for child in node.children() {
-            Self::process_node(name, &child, buffers, registry, meshes_url, asset_serialize_root)?;
+            Self::process_node(main_url, &child, buffers, registry, meshes_url, directory)?;
         }
 
         Ok(())
@@ -360,22 +330,22 @@ impl RawResourceProcessor for RawGltfProcessor {
 
     fn process(raw: Self::Raw, registry: &AssetRegistry, url: &AssetUrl, directory: &PathBuf) -> Result<()> {
         let RawGltf {
-            name,
             gltf,
             buffers,
             images,
             ..
         } = raw;
 
-        let asset_write_root = directory.join(url.as_ref().parent().unwrap().to_owned());
+        let root_url = url.path.to_str().ok_or(anyhow!("Invalid asset url"))?;
 
         let materials = Self::process_materials(&gltf, &images)?;
         let mut material_urls = Vec::with_capacity(materials.len());
 
         for material in materials {
-            let url = material.url(&name);
+            let url = material.url(root_url);
 
-            serialize_asset(&material, asset_write_root.join(&url.path))?;
+            let asset_write_root = directory.join(&url);
+            serialize_asset(&material, asset_write_root)?;
 
             material_urls.push(url.clone());
             registry.register(url, material);
@@ -384,7 +354,7 @@ impl RawResourceProcessor for RawGltfProcessor {
         let mut meshes_urls = Vec::with_capacity(material_urls.len());
         for scene in gltf.scenes() {
             for node in scene.nodes() {
-                Self::process_node(&name, &node, &buffers, registry, &mut meshes_urls, &asset_write_root)?;
+                Self::process_node(root_url, &node, &buffers, registry, &mut meshes_urls, &directory)?;
             }
         }
 
@@ -395,10 +365,11 @@ impl RawResourceProcessor for RawGltfProcessor {
             mesh_collection.add_mesh(mesh, mat);
         }
 
-        let url = mesh_collection.url(&name);
-        serialize_asset(&mesh_collection, asset_write_root.join(&url.path))?;
+        let url = mesh_collection.url(root_url);
+        let asset_write_root = directory.join(&url);
+        serialize_asset(&mesh_collection, asset_write_root)?;
 
-        info!("[{}] is loaded and serialized.", name);
+        info!("[{}] is loaded and serialized.", root_url);
         info!("{:?}", mesh_collection);
 
         Ok(())

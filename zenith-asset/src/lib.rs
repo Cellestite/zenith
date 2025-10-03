@@ -74,7 +74,7 @@ impl AssetRegistry {
         }
     }
 
-    fn get<A: Asset>(&self, url: AssetUrl) -> Option<AssetRef<A>> {
+    fn get<A: Asset>(&self, url: AssetUrl) -> Option<AssetRef<'_, A>> {
         let assets = self.assets_map.read();
         let key = (url, TypeId::of::<A>());
 
@@ -166,7 +166,7 @@ impl<A: Asset> AssetHandle<A> {
         }
     }
 
-    pub fn get(&self) -> Option<AssetRef<A>> {
+    pub fn get(&self) -> Option<AssetRef<'_, A>> {
         ASSET_REGISTRY.get().unwrap().get(self.url.clone())
     }
 }

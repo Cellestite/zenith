@@ -3,7 +3,6 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use anyhow::{anyhow};
 use memmap2::Mmap;
-use zenith_core::collections::SmallVec;
 use zenith_core::log::info;
 use zenith_task::{submit, submit_after, TaskHandle};
 use crate::gltf_loader::{GltfLoader, RawGltfProcessor};
@@ -36,7 +35,7 @@ pub struct AssetManager {
 }
 
 #[derive(Debug, Clone)]
-pub struct AsyncLoadTask(SmallVec<[TaskHandle; 2]>);
+pub struct AsyncLoadTask(Vec<TaskHandle>);
 
 impl AsyncLoadTask {
     pub fn wait(&self) {
@@ -76,13 +75,13 @@ impl AssetManager {
 
         let mesh_collection = MeshCollection::new(path);
         let asset_url = mesh_collection.asset_url();
-        let cached_path = self.cache_dir.join(asset_url.path);
+        let cached_file_path = self.cache_dir.join(asset_url.path);
 
-        if !cached_path.exists() {
+        if !cached_file_path.exists() {
             return true;
         }
 
-        let asset_metadata = match std::fs::metadata(cached_path) {
+        let asset_metadata = match std::fs::metadata(cached_file_path) {
             Ok(metadata) => metadata,
             Err(_) => return false,
         };
@@ -121,9 +120,7 @@ impl AssetManager {
             }).expect(&format!("Failed to process asset {:?}", path));
         }, [&result]);
 
-        let mut task_handles = SmallVec::new();
-        task_handles.push(task.into_handle());
-        AsyncLoadTask(task_handles)
+        AsyncLoadTask(vec![task.into_handle()])
     }
 
     pub fn request_load_asset(&self, load_request: AssetLoadRequest) -> AsyncLoadTask {
@@ -144,24 +141,20 @@ impl AssetManager {
             let (asset, _): (MeshCollection, usize) = bincode::serde::decode_from_slice(&mmap, bincode::config::standard())
                 .expect(&format!("Failed to deserialize asset {:?}", load_path));
 
-            let mut mesh_collection_handles = SmallVec::new();
+            let mut mesh_collection_handles = Vec::with_capacity(asset.meshes.len() + asset.materials.len());
             for mesh_url in &asset.meshes {
-                let mut mesh_load_path = asset.raw_asset_path.clone();
-                mesh_load_path.set_file_name(&mesh_url.path);
                 mesh_collection_handles.extend(self.request_load_asset(AssetLoadRequestBuilder::default()
-                    .url(mesh_load_path)
+                    .url(mesh_url.clone())
                     .build().unwrap()).0);
             }
 
             for mat_url in &asset.materials {
-                let mut mat_load_path = asset.raw_asset_path.clone();
-                mat_load_path.set_file_name(&mat_url.path);
                 mesh_collection_handles.extend(self.request_load_asset(AssetLoadRequestBuilder::default()
-                    .url(mat_load_path)
+                    .url(mat_url.clone())
                     .build().unwrap()).0);
             }
 
-            return AsyncLoadTask(SmallVec::from(mesh_collection_handles));
+            return AsyncLoadTask(mesh_collection_handles);
         }
 
         let task = submit(move || {
@@ -201,8 +194,6 @@ impl AssetManager {
             }
         });
 
-        let mut task_handles = SmallVec::new();
-        task_handles.push(task.into_handle());
-        AsyncLoadTask(task_handles)
+        AsyncLoadTask(vec![task.into_handle()])
     }
 }

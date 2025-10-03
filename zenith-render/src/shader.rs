@@ -1,4 +1,5 @@
 ﻿use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 use zenith_build::ShaderEntry;
 use zenith_core::collections::SmallVec;
 
@@ -130,7 +131,8 @@ impl GraphicShader {
             self.reflection_info,
             shader_defs,
             |path| {
-                let path = path.replace("/", "\\");
+                let path = PathBuf::from(path);
+                path.canonicalize()?;
                 std::fs::read_to_string(path)
             }
         )

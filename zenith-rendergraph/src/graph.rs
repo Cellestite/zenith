@@ -191,11 +191,12 @@ impl RenderGraph {
             .as_ref()
             .expect(&format!("Missing raster shader for node {}", node_name));
 
-        pipeline_cache.get_or_create_graphic_pipeline(
-            device,
-            shader,
-            &color_attachments,
-            depth_stencil_attachment)
+        pipeline_cache
+            .get_or_create_graphic_pipeline(
+                device,
+                shader,
+                &color_attachments,
+                depth_stencil_attachment)
             .expect(&format!("Failed to compile graphic pipeline: {}", shader.name()))
     }
 }

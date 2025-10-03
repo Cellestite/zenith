@@ -79,7 +79,7 @@ impl RenderGraphBuilder {
     }
 
     #[must_use]
-    pub fn add_graphic_node(&mut self, name: &str) -> GraphicNodeBuilder {
+    pub fn add_graphic_node(&mut self, name: &str) -> GraphicNodeBuilder<'_, '_> {
         let index = self.nodes.len();
 
         self.nodes.push(RenderGraphNode {
@@ -101,7 +101,7 @@ impl RenderGraphBuilder {
     }
 
     #[must_use]
-    pub fn add_lambda_node(&mut self, name: &str) -> LambdaNodeBuilder {
+    pub fn add_lambda_node(&mut self, name: &str) -> LambdaNodeBuilder<'_, '_> {
         let index = self.nodes.len();
 
         self.nodes.push(RenderGraphNode {
@@ -286,7 +286,7 @@ impl<'node, 'res> GraphicNodeBuilder<'node, 'res> {
 
     #[must_use]
     #[inline]
-    pub fn setup_pipeline(&mut self) -> GraphicPipelineBuilder {
+    pub fn setup_pipeline(&mut self) -> GraphicPipelineBuilder<'_> {
         let pipeline_desc = if let NodePipelineState::Graphic { pipeline_desc, .. } = &mut self.common.node.pipeline_state {
             pipeline_desc
         } else {
