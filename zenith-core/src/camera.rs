@@ -1,25 +1,25 @@
-﻿use glam::{EulerRot, Mat4, Quat, Vec3};
+﻿//! Zenith world space coordinate system (right-hand side, z up)
+//!
+//!                z
+//!                ^    y
+//!                |   /
+//!                |  /
+//!                | /
+//!                ----------> x
+//!
+
+use glam::{EulerRot, Mat4, Quat, Vec3};
 use log::{warn};
 use winit::event::{DeviceEvent, ElementState, MouseButton, WindowEvent};
 use winit::window::{CursorGrabMode, Window};
-use crate::input::InputActionMapper;
 use crate::math::{Degree, Radians};
-
-// Zenith world space coordinate system (right-hand side, z up)
-//
-//                z
-//                ^    y
-//                |   /
-//                |  /
-//                | /
-//                ----------> x
-//
 
 pub const NEAR_PLANE: f32 = 0.1;
 pub const WORLD_SPACE_UP: Vec3 = Vec3::new(0., 0., 1.);
 pub const WORLD_SPACE_FORWARD: Vec3 = Vec3::new(0., 1., 0.);
 pub const WORLD_SPACE_RIGHT: Vec3 = Vec3::new(1., 0., 0.);
 
+/// Common camera data.
 #[derive(Debug)]
 pub struct Camera {
     position: Vec3,
@@ -27,7 +27,6 @@ pub struct Camera {
     pitch: Radians,
     yaw: Radians,
 
-    // cached values
     forward: Vec3,
     right: Vec3,
     up: Vec3,
@@ -65,34 +64,41 @@ impl Camera {
         cam
     }
 
+    /// Return the location of camera.
     #[inline]
     pub fn location(&self) -> Vec3 {
         self.position
     }
 
+    /// Return the view matrix of this camera.
     #[inline]
     pub fn view(&self) -> Mat4 { self.view }
 
+    /// Return the projection matrix of this camera.
     #[inline]
     pub fn projection(&self) -> Mat4 {
         self.proj
     }
 
+    /// Return the view-projection matrix of this camera.
     #[inline]
     pub fn view_projection(&self) -> Mat4 {
         self.proj * self.view
     }
 
+    /// Return the forward vector of this camera.
     #[inline]
     pub fn forward(&self) -> Vec3 {
         self.forward
     }
 
+    /// Return the right vector of this camera.
     #[inline]
     pub fn right(&self) -> Vec3 {
         self.right
     }
 
+    /// Return the up vector of this camera.
     #[inline]
     pub fn up(&self) -> Vec3 {
         self.up
@@ -126,6 +132,7 @@ impl Camera {
     }
 }
 
+/// Controller to modify specific camera data.
 pub struct CameraController {
     accum_local_pitch: Radians,
     max_pitch_angle: Radians,
@@ -133,8 +140,8 @@ pub struct CameraController {
 
     move_speed: f32,
     mouse_sensitivity: f32,
-    // Higher the value, server the lagging. Zero means no smoothing
-    smoothing_factor: f32,
+    /// The higher the value, the higher the lagging. Zero results in abrupt changes.
+    rotation_smoothing_factor: f32,
 
     accum_dx: f32,
     accum_dy: f32,
@@ -150,7 +157,7 @@ impl Default for CameraController {
 
             move_speed: 70.,
             mouse_sensitivity: 1.,
-            smoothing_factor: 0.85,
+            rotation_smoothing_factor: 0.85,
 
             accum_dx: 0.0,
             accum_dy: 0.0,
@@ -166,7 +173,23 @@ impl CameraController {
             ..Default::default()
         }
     }
+    
+    /// The higher the value, the smoother the rotation.
+    pub fn set_rotation_smoothing_factor(&mut self, rotation_smoothing_factor: f32) {
+        self.rotation_smoothing_factor = rotation_smoothing_factor;
+    }
 
+    /// Determine how fast camera location changes.
+    pub fn set_move_speed(&mut self, move_speed: f32) {
+        self.move_speed = move_speed;
+    }
+
+    /// Determine how fast camera rotation changes.
+    pub fn set_mouse_sensitivity(&mut self, mouse_sensitivity: f32) {
+        self.mouse_sensitivity = mouse_sensitivity;
+    }
+
+    /// Receive and process window events.
     pub fn on_window_event(&mut self, event: &WindowEvent, window: &Window) {
         match event {
             WindowEvent::MouseInput { button, state, .. } => {
@@ -189,6 +212,7 @@ impl CameraController {
         }
     }
 
+    /// Receive and process device events.
     pub fn on_device_event(&mut self, event: &DeviceEvent) {
         match event {
             DeviceEvent::MouseMotion { delta } => {
@@ -201,11 +225,18 @@ impl CameraController {
         }
     }
 
-    pub fn update_cameras<'a>(&mut self, delta_time: f32, mapper: &InputActionMapper, to_update_cameras: impl IntoIterator<Item = &'a mut Camera>) {
-        let d_local_yaw: Radians = Radians::from(-self.accum_dx * self.mouse_sensitivity * delta_time);
-        let d_local_pitch: Radians = Radians::from(-self.accum_dy * self.mouse_sensitivity * delta_time);
+    /// Update camera with axis speed.
+    pub fn update_cameras<'a>(&mut self,
+                              delta_time: f32,
+                              forward_axis_speed: f32,
+                              right_axis_speed: f32,
+                              up_axis_speed: f32,
+                              to_update_cameras: impl IntoIterator<Item = &'a mut Camera>,
+    ) {
+        let d_local_yaw = Radians::from(-self.accum_dx * self.mouse_sensitivity * delta_time);
+        let d_local_pitch = Radians::from(-self.accum_dy * self.mouse_sensitivity * delta_time);
 
-        let blend_factor = 1.0 - self.smoothing_factor.powf(delta_time * 60.0);
+        let blend_factor = 1.0 - self.rotation_smoothing_factor.powf(delta_time * 60.0);
 
         self.accum_local_yaw += d_local_yaw;
         self.accum_local_pitch += d_local_pitch;
@@ -217,9 +248,9 @@ impl CameraController {
         self.accum_local_pitch -= delta_pitch;
 
         let axis_dir = Vec3::new(
-            mapper.get_axis("strafe"),
-            mapper.get_axis("walk"),
-            mapper.get_axis("lift"),
+            right_axis_speed,
+            forward_axis_speed,
+            up_axis_speed,
         );
         let delta_pos = axis_dir * self.move_speed * delta_time;
 

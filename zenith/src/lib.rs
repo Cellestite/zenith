@@ -26,6 +26,7 @@ module_facade!(render);
 module_facade!(renderer);
 module_facade!(rendergraph);
 
+/// Launch main engine loop with specific App.
 pub fn launch<A: RenderableApp>() -> Result<(), anyhow::Error> {
     zenith_task::initialize();
     zenith_core::log::initialize()?;

@@ -42,6 +42,9 @@ impl App for GltfRendererApp {
         mapper.register_axis("walk", [KeyCode::KeyW], [KeyCode::KeyS], 0.5);
         mapper.register_axis("lift", [KeyCode::KeyE], [KeyCode::KeyQ], 0.5);
 
+        let mut controller = CameraController::default();
+        controller.set_rotation_smoothing_factor(0.65);
+
         Ok(Self {
             asset_load_task,
             
@@ -49,7 +52,7 @@ impl App for GltfRendererApp {
             mesh_renderer: None,
             
             camera: Default::default(),
-            controller: Default::default(),
+            controller,
 
             mapper,
         })
@@ -66,7 +69,12 @@ impl App for GltfRendererApp {
 
     fn tick(&mut self, delta_time: f32) {
         self.mapper.tick(delta_time);
-        self.controller.update_cameras(delta_time, &self.mapper, [&mut self.camera]);
+
+        let forward_axis = self.mapper.get_axis("walk");
+        let right_axis = self.mapper.get_axis("strafe");
+        let up_axis = self.mapper.get_axis("lift");
+
+        self.controller.update_cameras(delta_time, forward_axis, right_axis, up_axis, [&mut self.camera]);
     }
 }
 

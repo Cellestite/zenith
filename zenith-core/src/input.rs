@@ -5,7 +5,7 @@ use crate::collections::hashmap::HashMap;
 use crate::collections::hashset::HashSet;
 use crate::collections::SmallVec;
 
-/// Represents the state of a key
+/// Key state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyState {
     /// KeyCode was just pressed this frame
@@ -18,6 +18,8 @@ pub enum KeyState {
     Released,
 }
 
+/// In duty of collecting input events from OS.
+/// User can query key input state for current frame.
 pub struct InputManager {
     keys_pressed: HashSet<KeyCode>,
     keys_just_pressed: HashSet<KeyCode>,
@@ -33,6 +35,7 @@ pub struct InputManager {
     modifiers: ModifiersState,
 }
 
+/// Modifier of this frame.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ModifiersState {
     pub shift: bool,
@@ -59,6 +62,7 @@ impl InputManager {
         }
     }
 
+    /// Receive and process window events.
     pub fn on_window_event(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::KeyboardInput { event, .. } => {
@@ -101,12 +105,13 @@ impl InputManager {
             }
             WindowEvent::Focused(false) => {
                 // clear all input when window loses focus
-                self.clear_all_input();
+                self.clear();
             }
             _ => {}
         }
     }
 
+    /// Update input states.
     pub fn tick(&mut self) {
         self.keys_just_pressed.clear();
         self.keys_just_released.clear();
@@ -140,7 +145,8 @@ impl InputManager {
         self.prev_keys_pressed = self.keys_pressed.clone();
         self.prev_mouse_pressed = self.mouse_pressed.clone();
     }
-    
+
+    /// Query the state of a key.
     pub fn key_state(&self, key: KeyCode) -> KeyState {
         if self.keys_just_pressed.contains(&key) {
             KeyState::JustPressed
@@ -153,43 +159,54 @@ impl InputManager {
         }
     }
 
+    /// Return true if a key is pressed.
     pub fn is_key_pressed(&self, key: KeyCode) -> bool {
         self.keys_pressed.contains(&key)
     }
-    
+
+    /// Return true if a key is just pressed (i.e. key turns from unpress to press in this frame)
     pub fn is_key_just_pressed(&self, key: KeyCode) -> bool {
         self.keys_just_pressed.contains(&key)
     }
 
+    /// Return true if a key is just released (i.e. key turns from press to unpress in this frame)
     pub fn is_key_just_released(&self, key: KeyCode) -> bool {
         self.keys_just_released.contains(&key)
     }
-    
+
+    /// Return true if a key is held (i.e. key is pressed but NOT just pressed)
     pub fn is_key_held(&self, key: KeyCode) -> bool {
         self.keys_pressed.contains(&key) && !self.keys_just_pressed.contains(&key)
     }
-    
+
+    /// Return all pressed keys.
     pub fn pressed_keys(&self) -> &HashSet<KeyCode> {
         &self.keys_pressed
     }
-    
+
+    /// Return true if a mouse button is pressed.
     pub fn is_mouse_pressed(&self, button: MouseButton) -> bool {
         self.mouse_pressed.contains(&button)
     }
 
+    /// Return true if a mouse button is just pressed. (i.e. mouse button turns from unpress to press in this frame)
     pub fn is_mouse_just_pressed(&self, button: MouseButton) -> bool {
         self.mouse_just_pressed.contains(&button)
     }
 
+    /// Return true if a mouse button is just pressed. (i.e. mouse button turns from press to unpress in this frame)
     pub fn is_mouse_just_released(&self, button: MouseButton) -> bool {
         self.mouse_just_released.contains(&button)
     }
 
+    /// Return the state of modifier key in this frame.
     pub fn modifiers(&self) -> &ModifiersState {
         &self.modifiers
     }
 
-    pub fn clear_all_input(&mut self) {
+    /// Clear all inner states.
+    /// Useful to reset all input events.
+    pub fn clear(&mut self) {
         self.keys_pressed.clear();
         self.keys_just_pressed.clear();
         self.keys_just_released.clear();
@@ -200,18 +217,23 @@ impl InputManager {
     }
 }
 
+/// Map input events into meaningful input action.
+/// Current support:
+///     Input action (single key pressed, 0 or 1)
+///     Axis action  (1D direction vector represents by float between [-1, 1])
 pub struct InputActionMapper {
     input: InputManager,
     action_mappings: HashMap<String, SmallVec<[KeyCode; 1]>>,
     axis_mappings: HashMap<String, AxisMapping>,
 }
 
+/// Directional, non-abrupt changes mapping useful to do movement mapping.
 #[derive(Debug, Clone)]
 pub struct AxisMapping {
     positive: SmallVec<[KeyCode; 1]>,
     negative: SmallVec<[KeyCode; 1]>,
     axis: f32,
-    // Higher the value, server the lagging. Zero means no smoothing
+    /// The higher the value, the higher the lagging. Zero fallbacks to abrupt change.
     smoothing_factor: f32,
 }
 
@@ -224,10 +246,12 @@ impl InputActionMapper {
         }
     }
 
+    /// Register an action mapping.
     pub fn register_action(&mut self, action: &str, keys: impl IntoIterator<Item = KeyCode>) {
         self.action_mappings.insert(action.to_string(), keys.into_iter().collect::<SmallVec<_>>());
     }
 
+    /// Register an axis mapping.
     pub fn register_axis(&mut self, axis: &str, positive: impl IntoIterator<Item = KeyCode>, negative: impl IntoIterator<Item = KeyCode>, smoothing_factor: f32) {
         self.axis_mappings.insert(
             axis.to_string(),
@@ -240,10 +264,12 @@ impl InputActionMapper {
         );
     }
 
+    /// Receive and process window events.
     pub fn on_window_event(&mut self, event: &WindowEvent) {
         self.input.on_window_event(event);
     }
 
+    /// Update input mapping states.
     pub fn tick(&mut self, delta_time: f32) {
         self.input.tick();
 
@@ -273,6 +299,7 @@ impl InputActionMapper {
         }
     }
 
+    /// Return true if a specific action is pressed.
     pub fn is_action_pressed(&self, action: &str) -> bool {
         if let Some(keys) = self.action_mappings.get(action) {
             keys.iter().any(|key| self.input.is_key_pressed(*key))
@@ -281,6 +308,7 @@ impl InputActionMapper {
         }
     }
 
+    /// Return true if a specific action is just pressed. (i.e. action turns from unpress to press in this frame)
     pub fn is_action_just_pressed(&self, action: &str) -> bool {
         if let Some(keys) = self.action_mappings.get(action) {
             keys.iter().any(|key| self.input.is_key_just_pressed(*key))
@@ -289,6 +317,7 @@ impl InputActionMapper {
         }
     }
 
+    /// Return a float in [-1, 1] represents the direction and strength for a specific axis mapping.
     pub fn get_axis(&self, axis: &str) -> f32 {
         if let Some(mapping) = self.axis_mappings.get(axis) {
             mapping.axis
@@ -297,6 +326,7 @@ impl InputActionMapper {
         }
     }
 
+    /// Get the inner input manager in order to query raw input events.
     pub fn raw_input(&self) -> &InputManager {
         &self.input
     }
