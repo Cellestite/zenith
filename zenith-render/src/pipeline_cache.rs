@@ -3,6 +3,7 @@ use zenith_core::collections::{DefaultHasher};
 use zenith_core::collections::hashmap::{Entry, HashMap};
 use crate::shader::{GraphicShader};
 
+/// Cache all types of pipelines created during rendering.
 pub struct PipelineCache {
     raster_pipelines: HashMap<u64, wgpu::RenderPipeline>,
 }
@@ -14,6 +15,8 @@ impl PipelineCache {
         }
     }
 
+    /// If this pipeline is exist, return the cached pipeline.
+    /// If this pipeline is NOT exists, create one and return it.
     pub fn get_or_create_graphic_pipeline(
         &mut self,
         device: &wgpu::Device,
@@ -30,7 +33,7 @@ impl PipelineCache {
                 Ok(pipeline.get().clone())
             }
             Entry::Vacant(entry) => {
-                let module = shader.create_shader_module_relative_path(
+                let module = shader.create_shader_module(
                     device,
                     Default::default(),
                 )?;

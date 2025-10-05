@@ -2,6 +2,7 @@
 use winit::window::Window;
 use zenith_core::log::info;
 
+/// Render device to maintain and dispatch all rendering instructions.
 pub struct RenderDevice {
     #[allow(dead_code)]
     instance: wgpu::Instance,
@@ -76,14 +77,18 @@ impl RenderDevice {
         })
     }
 
+    /// Return the inner render device (wgpu).
     pub fn device(&self) -> &wgpu::Device {
         &self.device
     }
 
+    /// Return the main submit queue.
     pub fn queue(&self) -> &wgpu::Queue {
         &self.queue
     }
 
+    /// Acquire next frame from swapchain.
+    /// If acquire fails, this function will panic.
     pub fn acquire_next_frame(&self) -> wgpu::SurfaceTexture {
         match self.surface.get_current_texture() {
             Ok(frame) => frame,
@@ -107,6 +112,7 @@ impl RenderDevice {
         }
     }
 
+    /// Resize the swapchain with specific width and height.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.surface_config.width = width.max(1);
         self.surface_config.height = height.max(1);

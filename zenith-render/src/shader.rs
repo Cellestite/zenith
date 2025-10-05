@@ -5,6 +5,7 @@ use zenith_core::collections::SmallVec;
 
 pub const SHADER_ASSET_ABSOLUTE_DIR: &str = include_absolute_path::include_absolute_path!("../../zenith-build/shader");
 
+/// Define a shader entry which located in zenith-build/shader/.
 #[macro_export]
 macro_rules! define_shader {
     ($(let $name:ident = Graphic($module:ident, $path:expr, $entry:expr, $step_mode:expr, $num_color_outputs:expr, $num_bindgroup:expr)),*) => {
@@ -36,7 +37,7 @@ macro_rules! define_shader {
     };
 }
 
-// TODO: robust shader hash
+/// A shader object corresponds to a graphic pipeline.
 pub struct GraphicShader {
     name: String,
     reflection_info: ShaderEntry,
@@ -85,10 +86,12 @@ impl GraphicShader {
         })
     }
 
+    /// Return the name of this shader.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Create a graphic pipeline vertex state used in this shader.
     pub fn create_vertex_state<'a>(&'a self, module: &'a wgpu::ShaderModule) -> wgpu::VertexState<'a> {
         wgpu::VertexState {
             module,
@@ -101,6 +104,7 @@ impl GraphicShader {
         }
     }
 
+    /// Create a graphic pipeline fragment state used in this shader.
     pub fn create_fragment_state<'a>(&'a self, module: &'a wgpu::ShaderModule, color_targets: &'a [Option<wgpu::ColorTargetState>]) -> Option<wgpu::FragmentState<'a>> {
         if self.num_color_targets != 0 {
             Some(wgpu::FragmentState {
@@ -117,10 +121,13 @@ impl GraphicShader {
         }
     }
 
+    /// Create a graphic pipeline layout used in this shader.
     pub fn create_pipeline_layout(&self, device: &wgpu::Device) -> wgpu::PipelineLayout {
         self.reflection_info.create_pipeline_layout(device)
     }
-    pub fn create_shader_module_relative_path(
+
+    /// Create a shader module.
+    pub fn create_shader_module(
         &self,
         device: &wgpu::Device,
         shader_defs: std::collections::HashMap<String, naga_oil::compose::ShaderDefValue>,
@@ -138,26 +145,32 @@ impl GraphicShader {
         )
     }
 
+    /// Create shader resources bindings for this shader.
     pub fn create_bind_group_layout(&self, device: &wgpu::Device, group: u32) -> Option<wgpu::BindGroupLayout> {
         self.bind_group_layouts.get(group as usize).map(|binding| device.create_bind_group_layout(binding))
     }
 
+    /// Return the relative path of this shader. (Relative to zenith-build/shader/)
     pub fn relative_path(&self) -> &'static str {
         self.reflection_info.relative_path()
     }
 
+    /// Return the number of bind group used in this shader.
     pub fn num_bind_groups(&self) -> u32 {
         self.bind_group_layouts.len() as u32
     }
 
+    /// Return the number of bindings (all bind groups) used in this shader.
     pub fn num_bindings(&self, group: u32) -> Option<u32> {
         self.bind_group_layouts.get(group as usize).map(|binding| binding.entries.len() as u32)
     }
 
+    /// Return the vertex shader entry name.
     pub fn vertex_entry_name(&self) -> &str {
         &self.vertex_entry
     }
 
+    /// Return the fragment shader entry name.
     pub fn fragment_entry_name(&self) -> &str {
         &self.fragment_entry
     }

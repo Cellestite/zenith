@@ -43,7 +43,6 @@ impl App for GltfRendererApp {
         mapper.register_axis("lift", [KeyCode::KeyE], [KeyCode::KeyQ], 0.5);
 
         let mut controller = CameraController::default();
-        controller.set_rotation_smoothing_factor(0.65);
 
         Ok(Self {
             asset_load_task,
