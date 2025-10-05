@@ -157,7 +157,7 @@ impl Default for CameraController {
 
             move_speed: 70.,
             mouse_sensitivity: 1.,
-            rotation_smoothing_factor: 0.85,
+            rotation_smoothing_factor: 0.5,
 
             accum_dx: 0.0,
             accum_dy: 0.0,
@@ -173,7 +173,7 @@ impl CameraController {
             ..Default::default()
         }
     }
-    
+
     /// The higher the value, the smoother the rotation.
     pub fn set_rotation_smoothing_factor(&mut self, rotation_smoothing_factor: f32) {
         self.rotation_smoothing_factor = rotation_smoothing_factor;
