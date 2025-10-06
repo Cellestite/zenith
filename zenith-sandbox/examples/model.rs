@@ -42,8 +42,6 @@ impl App for GltfRendererApp {
         mapper.register_axis("walk", [KeyCode::KeyW], [KeyCode::KeyS], 0.5);
         mapper.register_axis("lift", [KeyCode::KeyE], [KeyCode::KeyQ], 0.5);
 
-        let mut controller = CameraController::default();
-
         Ok(Self {
             asset_load_task,
             
@@ -51,7 +49,7 @@ impl App for GltfRendererApp {
             mesh_renderer: None,
             
             camera: Default::default(),
-            controller,
+            controller: Default::default(),
 
             mapper,
         })
